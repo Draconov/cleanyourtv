@@ -11,6 +11,7 @@ import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -32,6 +33,7 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -73,6 +75,8 @@ public final class AppAppearanceActivity extends Activity {
         }
     };
     private LinearLayout editorPane;
+    private LinearLayout editorControls;
+    private ScrollView editorScroll;
     private ListView appList;
     private TextView editorTitle;
     private ImageView previewIcon;
@@ -128,6 +132,15 @@ public final class AppAppearanceActivity extends Activity {
             b.setBackground(rounded(focused));
             b.setTextColor(focused ? Color.BLACK : Color.WHITE);
             b.setSelected(focused);
+            // Remote focus must never leave the bottom of a settings row clipped.
+            if (focused && editorScroll != null && editorScroll.getVisibility() == View.VISIBLE) {
+                editorScroll.post(() -> {
+                    if (b.hasFocus() && b.getWidth() > 0) {
+                        Rect row = new Rect(0, 0, b.getWidth(), b.getHeight() + dp(7));
+                        editorScroll.requestChildRectangleOnScreen(b, row, false);
+                    }
+                });
+            }
         });
         b.setFocusable(true);
         return b;
@@ -182,10 +195,23 @@ public final class AppAppearanceActivity extends Activity {
         editorPane.setPadding(dp(19), dp(13), dp(19), dp(13));
         columns.addView(editorPane, new LinearLayout.LayoutParams(0, -1, 0.58f));
 
+        // Only the editor controls scroll. Source-app and photo choice lists retain
+        // their own native ListView scrolling, so D-pad navigation remains predictable.
+        editorScroll = new ScrollView(this);
+        editorScroll.setFillViewport(false);
+        editorScroll.setVerticalScrollBarEnabled(true);
+        editorScroll.setScrollbarFadingEnabled(true);
+        editorScroll.setSmoothScrollingEnabled(true);
+        editorScroll.setFocusable(false);
+        editorControls = vertical();
+        editorControls.setPadding(0, 0, dp(5), 0); // Clearance for the scrollbar.
+        editorScroll.addView(editorControls, new android.widget.FrameLayout.LayoutParams(-1, -2));
+        editorPane.addView(editorScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
         editorTitle = text("", 20, Color.WHITE);
         editorTitle.setSingleLine(true);
         editorTitle.setEllipsize(TextUtils.TruncateAt.END);
-        editorPane.addView(editorTitle, new LinearLayout.LayoutParams(-1, dp(38)));
+        editorControls.addView(editorTitle, new LinearLayout.LayoutParams(-1, dp(38)));
         previewIcon = new ImageView(this);
         // Match the real 16:9 application tile rather than previewing a square icon.
         previewIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -195,25 +221,30 @@ public final class AppAppearanceActivity extends Activity {
         imageLp.gravity = Gravity.CENTER_HORIZONTAL;
         imageLp.topMargin = dp(2);
         imageLp.bottomMargin = dp(9);
-        editorPane.addView(previewIcon, imageLp);
+        editorControls.addView(previewIcon, imageLp);
         nameButton = button(R.string.app_appearance_name);
         imageButton = button(R.string.app_appearance_from_image);
         appIconButton = button(R.string.app_appearance_from_app);
         sourcePackageButton = button(R.string.app_appearance_source_package);
         resetButton = button(R.string.app_appearance_reset);
         backButton = button(R.string.app_appearance_back);
-        for (Button b : new Button[]{nameButton, imageButton, appIconButton, sourcePackageButton, resetButton, backButton}) {
+        // Explicit IDs and vertical navigation keep all six actions reachable via
+        // the TV remote, even when the panel is shorter than its contents.
+        appList.setId(View.generateViewId());
+        Button[] actions = {nameButton, imageButton, appIconButton, sourcePackageButton, resetButton, backButton};
+        for (int i = 0; i < actions.length; i++) {
+            Button b = actions[i];
+            b.setId(View.generateViewId());
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(49));
             lp.bottomMargin = dp(7);
-            editorPane.addView(b, lp);
+            editorControls.addView(b, lp);
             b.setNextFocusLeftId(appList.getId());
+            if (i > 0) b.setNextFocusUpId(actions[i - 1].getId());
         }
-        // Explicit IDs make left/right navigation predictable on TV remotes.
-        appList.setId(View.generateViewId());
-        nameButton.setId(View.generateViewId());
+        for (int i = 0; i + 1 < actions.length; i++) {
+            actions[i].setNextFocusDownId(actions[i + 1].getId());
+        }
         appList.setNextFocusRightId(nameButton.getId());
-        for (Button b : new Button[]{nameButton, imageButton, appIconButton, sourcePackageButton, resetButton, backButton})
-            b.setNextFocusLeftId(appList.getId());
         nameButton.setOnClickListener(v -> rename());
         imageButton.setOnClickListener(v -> listPictures());
         appIconButton.setOnClickListener(v -> listSourceApps());
@@ -276,6 +307,9 @@ public final class AppAppearanceActivity extends Activity {
         previewIcon.setImageDrawable(override != null ? override.drawable : originalIconFor(editingPackage));
         resetButton.setEnabled(AppAppearance.hasOverride(this, editingPackage));
         resetButton.setAlpha(resetButton.isEnabled() ? 1f : 0.5f);
+        // Skip the disabled Reset action instead of trapping D-pad navigation.
+        sourcePackageButton.setNextFocusDownId(resetButton.isEnabled() ? resetButton.getId() : backButton.getId());
+        backButton.setNextFocusUpId(resetButton.isEnabled() ? resetButton.getId() : sourcePackageButton.getId());
         appAdapter.notifyDataSetChanged();
     }
 
@@ -283,11 +317,9 @@ public final class AppAppearanceActivity extends Activity {
         editorPane.setVisibility(View.VISIBLE);
         choiceList.setVisibility(View.GONE);
         choiceTitle.setVisibility(View.GONE);
-        editorTitle.setVisibility(View.VISIBLE);
-        previewIcon.setVisibility(View.VISIBLE);
-        for (Button b : new Button[]{nameButton,imageButton,appIconButton,sourcePackageButton,resetButton,backButton})
-            b.setVisibility(View.VISIBLE);
+        editorScroll.setVisibility(View.VISIBLE);
         updateEditor();
+        editorScroll.scrollTo(0, 0);
         nameButton.requestFocus();
     }
 
@@ -408,10 +440,7 @@ public final class AppAppearanceActivity extends Activity {
 
     private void showOptions(int title, BaseAdapter adapter) {
         ++selectionGeneration;
-        editorTitle.setVisibility(View.GONE);
-        previewIcon.setVisibility(View.GONE);
-        for (Button b : new Button[]{nameButton,imageButton,appIconButton,sourcePackageButton,resetButton,backButton})
-            b.setVisibility(View.GONE);
+        editorScroll.setVisibility(View.GONE);
         choiceTitle.setText(title);
         choiceTitle.setVisibility(View.VISIBLE);
         choiceList.setAdapter(adapter);
