@@ -6,8 +6,8 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/glass_panel"
-    android:paddingStart="26dp"
-    android:paddingEnd="26dp"
+    android:paddingStart="15dp"
+    android:paddingEnd="15dp"
     android:paddingTop="22dp"
     android:paddingBottom="20dp"
     android:elevation="12dp">
@@ -19,7 +19,7 @@
         android:singleLine="true"
         android:ellipsize="end"
         android:textColor="#FFFFFFFF"
-        android:textSize="22sp"
+        android:textSize="20sp"
         android:fontFamily="@string/font_medium"
         android:letterSpacing="-0.01" />
 

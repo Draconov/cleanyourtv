@@ -27,17 +27,13 @@ final class RowaWallpaperStyleDialog {
         return view;
     }
     private static GradientDrawable rowBackground(Activity activity, boolean focused) {
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(focused ? 0xFFF1F3F6 : 0xD6262B34);
-        shape.setCornerRadius(dp(activity, 9));
-        shape.setStroke(dp(activity, 1), focused ? 0xFFFFFFFF : 0x35FFFFFF);
-        return shape;
+        return RowaMenuStyle.row(activity, focused);
     }
     private static Button button(Activity c, LinearLayout parent, String label, Runnable click) {
         Button b = new Button(c);
         b.setAllCaps(false);
         b.setText(label);
-        b.setTextSize(15);
+        b.setTextSize(RowaMenuStyle.TEXT_SP);
         b.setTextColor(Color.WHITE);
         b.setBackground(rowBackground(c, false));
         b.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
@@ -46,8 +42,9 @@ final class RowaWallpaperStyleDialog {
             b.setTextColor(focused ? Color.BLACK : Color.WHITE);
             b.setBackground(rowBackground(c, focused));
         });
+        RowaMenuMarquee.bind(b, b);
         b.setOnClickListener(v -> click.run());
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(c, 46));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(c, RowaMenuStyle.ROW_DP));
         lp.bottomMargin = dp(c, 4);
         parent.addView(b, lp);
         return b;

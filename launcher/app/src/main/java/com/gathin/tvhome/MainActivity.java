@@ -3129,15 +3129,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         }
         // Exactly the Settings menu's row styling, but constrained in height for a small TV.
-        android.view.ViewGroup container = (android.view.ViewGroup) rows.getParent();
-        container.removeView(rows);
-        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        // This is the shared scrollable popup, not a nested second ScrollView.
+        android.widget.ScrollView scroll = panel.findViewById(R.id.popupScroll);
         scroll.setVerticalScrollBarEnabled(false);
         scroll.setFillViewport(false);
-        scroll.addView(rows, new android.widget.ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        container.addView(scroll, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.round(265 * density));
         popup.setHeight(Math.min(panel.getMeasuredHeight(), Math.round(330 * density)));
@@ -3518,6 +3513,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Drop in: fade and unfold from the top edge, hanging under the anchor pill. */
     private void dropIn(PopupWindow popup, View panel, View anchor, int gravity) {
+        fitDropdownToScreen(popup, panel, anchor);
         panel.setAlpha(0f);
         panel.setPivotY(0f);
         panel.setScaleY(0.92f);
@@ -3525,6 +3521,35 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         popup.showAsDropDown(anchor, 0, (int) (10 * density), gravity);
         panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(reducedMotion ? Motion.REDUCED_MS : 220)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+    }
+
+    /** Fit every shared dropdown into the current display. The rows stay focusable and
+     * the inner scroll view handles Up/Down when more items are present than fit. */
+    private void fitDropdownToScreen(PopupWindow popup, View panel, View anchor) {
+        android.widget.ScrollView scroll = panel.findViewById(R.id.popupScroll);
+        if (scroll == null) return;
+        int height = getResources().getDisplayMetrics().heightPixels;
+        int[] origin = new int[2];
+        anchor.getLocationOnScreen(origin);
+        int below = height - origin[1] - anchor.getHeight() - Math.round(30 * density);
+        int above = origin[1] - Math.round(24 * density);
+        int capacity = Math.min(height - Math.round(36 * density),
+                Math.max(Math.max(below, above), Math.round(110 * density)));
+        // Respect specialized menu limits, such as the Appearance panel's 360dp cap.
+        int configuredHeight = popup.getHeight();
+        if (configuredHeight > 0) capacity = Math.min(capacity, configuredHeight);
+        int width = Math.max(Math.round(140 * density), popup.getWidth());
+        panel.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height * 3, View.MeasureSpec.AT_MOST));
+        int natural = panel.getMeasuredHeight();
+        if (natural > capacity) {
+            int overhead = natural - scroll.getMeasuredHeight();
+            int rowsHeight = Math.max(Math.round(42 * density), capacity - overhead);
+            android.view.ViewGroup.LayoutParams params = scroll.getLayoutParams();
+            params.height = rowsHeight;
+            scroll.setLayoutParams(params);
+            popup.setHeight(Math.min(capacity, overhead + rowsHeight));
+        } else popup.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     private void addSeparator(LinearLayout rows) {
@@ -4086,15 +4111,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         rowaFixAppearanceContrast(rows);
         rowaV15Contrast(rows);
         // Same settings glass; scroll rather than showing an off-screen menu on a 32-inch TV.
-        ViewGroup container = (ViewGroup) rows.getParent();
-        container.removeView(rows);
-        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        // popup_inputs now provides the shared scroll container for every dropdown.
+        android.widget.ScrollView scroll = panel.findViewById(R.id.popupScroll);
         scroll.setVerticalScrollBarEnabled(false);
         scroll.setFillViewport(false);
-        scroll.addView(rows, new android.widget.ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        container.addView(scroll, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setHeight(Math.min(panel.getMeasuredHeight(), Math.round(360 * density)));
         dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
@@ -4522,6 +4542,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         TextView keep = panel.findViewById(R.id.btnKeep);
         TextView show = panel.findViewById(R.id.btnShow);
 
+        RowaMenuStyle.glass(panel, this);
         final Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         dialog.setContentView(panel);
@@ -4529,7 +4550,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         Window w = dialog.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            w.setLayout((int) (440 * density), ViewGroup.LayoutParams.WRAP_CONTENT);
             w.setDimAmount(0.6f);
         }
         // One decision per prompt: the buttons and Back (cancel) all end here.
@@ -4559,6 +4579,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         show.setOnKeyListener(keys);
         cardPrompt = dialog;
         dialog.show();
+        if (w != null) w.setLayout(Math.min(Math.round(440 * density),
+                getResources().getDisplayMetrics().widthPixels - Math.round(32 * density)),
+                ViewGroup.LayoutParams.WRAP_CONTENT);
         keep.requestFocus();
     }
 

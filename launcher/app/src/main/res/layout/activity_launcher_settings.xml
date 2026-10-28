@@ -30,7 +30,7 @@
             android:layout_height="wrap_content"
             android:text="@string/launcher_settings"
             android:textColor="#FFFFFFFF"
-            android:textSize="25sp" />
+            android:textSize="20sp" />
 
         <TextView
             android:id="@+id/reorderChoice"
@@ -52,7 +52,7 @@
             android:layout_marginTop="28dp"
             android:text="@string/columns_label"
             android:textColor="#FFFFFFFF"
-            android:textSize="17sp" />
+            android:textSize="15sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -72,7 +72,7 @@
             android:layout_marginTop="18dp"
             android:text="@string/rows_below_dock_label"
             android:textColor="#FFFFFFFF"
-            android:textSize="17sp" />
+            android:textSize="15sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -92,7 +92,7 @@
             android:layout_marginTop="18dp"
             android:text="@string/dock_opacity_label"
             android:textColor="#FFFFFFFF"
-            android:textSize="17sp" />
+            android:textSize="15sp" />
 
         <LinearLayout
             android:layout_width="match_parent"

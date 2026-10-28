@@ -28,9 +28,9 @@ final class RowaGlassDialog {
 
     private static GradientDrawable background(Activity a, boolean focused) {
         GradientDrawable d = new GradientDrawable();
-        d.setColor(focused ? 0xFFF1F4F6 : 0x39242C36);
-        d.setCornerRadius(dp(a, 11));
-        d.setStroke(dp(a, focused ? 2 : 1), focused ? Color.WHITE : 0x44FFFFFF);
+        d.setColor(focused ? 0xFFF1F4F6 : 0xD6262B34);
+        d.setCornerRadius(dp(a, RowaMenuStyle.ROW_RADIUS_DP));
+        d.setStroke(dp(a, focused ? 2 : 1), focused ? Color.WHITE : 0x35FFFFFF);
         return d;
     }
 
@@ -38,7 +38,7 @@ final class RowaGlassDialog {
         TextView t = new TextView(a);
         t.setText(label);
         t.setTextColor(Color.WHITE);
-        t.setTextSize(16);
+        t.setTextSize(RowaMenuStyle.TEXT_SP);
         t.setSingleLine(true);
         t.setEllipsize(TextUtils.TruncateAt.MARQUEE);
         t.setMarqueeRepeatLimit(2);
@@ -58,7 +58,7 @@ final class RowaGlassDialog {
 
     static void addRow(Activity a, LinearLayout parent, CharSequence label, Runnable action) {
         TextView item = row(a, label);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(a, 46));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(a, RowaMenuStyle.ROW_DP));
         lp.bottomMargin = dp(a, 5);
         parent.addView(item, lp);
         item.setOnClickListener(v -> action.run());
@@ -82,7 +82,7 @@ final class RowaGlassDialog {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(a, 15), dp(a, 14), dp(a, 15), dp(a, 14));
         panel.setBackgroundResource(R.drawable.glass_panel);
-        panel.getBackground().mutate().setAlpha(RowaVisualOptions.panelAlpha(a));
+        RowaMenuStyle.glass(panel, a);
 
         if (!TextUtils.isEmpty(title)) {
             TextView heading = new TextView(a);
@@ -103,7 +103,31 @@ final class RowaGlassDialog {
             // The content itself may be a scroll view; avoid nesting scroll views.
             ViewGroup.LayoutParams original = content.getLayoutParams();
             int contentHeight = original != null && original.height > 0 ? original.height : -2;
-            panel.addView(content, new LinearLayout.LayoutParams(-1, contentHeight));
+            int screenHeight = a.getResources().getDisplayMetrics().heightPixels;
+            int reserved = dp(a, 160 + (title == null ? 0 : 42)
+                    + (positive == null ? 0 : RowaMenuStyle.ROW_DP)
+                    + (neutral == null ? 0 : RowaMenuStyle.ROW_DP));
+            int limit = Math.max(dp(a, 85), screenHeight - reserved);
+            if (contentHeight > limit) contentHeight = limit;
+            if (contentHeight < 0 && !(content instanceof ScrollView)) {
+                ScrollView scrollingBody = new ScrollView(a) {
+                    @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                        super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(limit,
+                                View.MeasureSpec.AT_MOST));
+                    }
+                };
+                scrollingBody.setFillViewport(false);
+                scrollingBody.setVerticalScrollBarEnabled(false);
+                scrollingBody.setFocusable(false);
+                scrollingBody.addView(content);
+                panel.addView(scrollingBody, new LinearLayout.LayoutParams(-1, -2));
+            } else {
+                // Embedded wallpaper controls are already a ScrollView; don't nest them,
+                // but still bound their height so buttons remain visible on 480p TVs.
+                if (content instanceof ScrollView && contentHeight < 0)
+                    contentHeight = limit;
+                panel.addView(content, new LinearLayout.LayoutParams(-1, contentHeight));
+            }
         }
         if (positive != null) addRow(a, panel, positive, () -> {
             dialog.dismiss();

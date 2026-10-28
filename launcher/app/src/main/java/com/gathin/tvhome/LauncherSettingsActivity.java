@@ -47,11 +47,15 @@ public final class LauncherSettingsActivity extends Activity {
         android.widget.FrameLayout.LayoutParams frame =
                 (android.widget.FrameLayout.LayoutParams) panel.getLayoutParams();
         float d = getResources().getDisplayMetrics().density;
-        frame.width = Math.min(Math.round(620 * d),
+        frame.width = Math.min(Math.round(520 * d),
                 getResources().getDisplayMetrics().widthPixels - Math.round(42 * d));
         frame.height = getResources().getDisplayMetrics().heightPixels - Math.round(36 * d);
         panel.setLayoutParams(frame);
-        panel.getBackground().mutate().setAlpha(RowaVisualOptions.panelAlpha(this));
+        RowaMenuStyle.glass(panel, this);
+        // When the keyboard or display changes size, ScrollView brings the focused row into view.
+        android.widget.ScrollView settingsScroll = (android.widget.ScrollView) panel;
+        settingsScroll.setDescendantFocusability(android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        settingsScroll.setSmoothScrollingEnabled(true);
         choices = getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE);
         Config config = Config.load(this);
         View reorderChoice = findViewById(R.id.reorderChoice);

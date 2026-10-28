@@ -163,14 +163,13 @@ public final class RowaDownloadsBrowserActivity extends Activity {
         button.setAllCaps(false);
         button.setTextColor(Color.WHITE);
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
-        button.setBackground(rounded(0xD6262B34, 0x35FFFFFF, 9));
+        button.setBackground(RowaMenuStyle.row(this, false));
         button.setPadding(dp(9), dp(3), dp(9), dp(3));
         button.setOnFocusChangeListener((v, focused) -> {
-            button.setBackground(focused
-                    ? rounded(0xFFF1F3F6, 0xFFFFFFFF, 9)
-                    : rounded(0xD6262B34, 0x35FFFFFF, 9));
+            button.setBackground(RowaMenuStyle.row(this, focused));
             button.setTextColor(focused ? Color.BLACK : Color.WHITE);
         });
+        RowaMenuMarquee.bind(button, button);
         return button;
     }
 
@@ -231,7 +230,6 @@ public final class RowaDownloadsBrowserActivity extends Activity {
         sourceButton.setSingleLine(true);
         sourceButton.setEllipsize(TextUtils.TruncateAt.END);
         sourceButton.setOnClickListener(v -> showFolders());
-        RowaMenuMarquee.bind(sourceButton, sourceButton);
         sourceRow = new LinearLayout(this);
         sourceRow.setOrientation(LinearLayout.HORIZONTAL);
         sourceRow.addView(sourceButton, new LinearLayout.LayoutParams(0, dp(42), 1f));
@@ -254,8 +252,8 @@ public final class RowaDownloadsBrowserActivity extends Activity {
         grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
         grid.setDrawSelectorOnTop(true);
         GradientDrawable focus = new GradientDrawable();
-        focus.setColor(0x224C9CFF);
-        focus.setCornerRadius(dp(9));
+        focus.setColor(0x66F1F4F6);
+        focus.setCornerRadius(dp(RowaMenuStyle.ROW_RADIUS_DP));
         focus.setStroke(dp(3), Color.WHITE);
         grid.setSelector(focus);
         photoAdapter = new PhotoAdapter();
@@ -300,8 +298,8 @@ public final class RowaDownloadsBrowserActivity extends Activity {
         folderList.setDivider(new ColorDrawable(0xFF2A3039));
         folderList.setDividerHeight(dp(2));
         GradientDrawable folderFocus = new GradientDrawable();
-        folderFocus.setColor(0x66587898);
-        folderFocus.setCornerRadius(dp(8));
+        folderFocus.setColor(0xFF35383E);
+        folderFocus.setCornerRadius(dp(RowaMenuStyle.ROW_RADIUS_DP));
         folderFocus.setStroke(dp(2), Color.WHITE);
         folderList.setSelector(folderFocus);
         folderList.setDrawSelectorOnTop(true);
@@ -958,15 +956,15 @@ public final class RowaDownloadsBrowserActivity extends Activity {
         @Override public Object getItem(int position) { return folders.get(position); }
         @Override public long getItemId(int position) { return position; }
         @Override public View getView(int position, View reused, ViewGroup parent) {
-            TextView text = reused instanceof TextView ? (TextView) reused : label("", 18, Color.WHITE);
+            TextView text = reused instanceof TextView ? (TextView) reused : label("", 15, Color.WHITE);
             Folder folder = folders.get(position);
             text.setSingleLine(true);
             text.setEllipsize(TextUtils.TruncateAt.END);
             text.setText((folder.relativePath.equals(currentFolder) ? "✓  " : "   ")
                     + folder.relativePath + "    (" + folder.count + ")");
             text.setPadding(dp(20), dp(6), dp(12), dp(6));
-            text.setMinHeight(dp(54));
-            text.setBackgroundColor(0xFF222832);
+            text.setMinHeight(dp(RowaMenuStyle.ROW_DP));
+            text.setBackground(RowaMenuStyle.row(RowaDownloadsBrowserActivity.this, false));
             text.setTextColor(0xFFFFFFFF);
             return text;
         }

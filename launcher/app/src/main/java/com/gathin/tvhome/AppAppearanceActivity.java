@@ -93,18 +93,14 @@ public final class AppAppearanceActivity extends Activity {
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 
     private GradientDrawable rounded(boolean focused) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(10));
-        bg.setColor(focused ? 0xFFF2F4F6 : 0xC8272D35);
-        bg.setStroke(dp(focused ? 2 : 1), focused ? Color.WHITE : 0x44FFFFFF);
-        return bg;
+        return RowaMenuStyle.row(this, focused);
     }
 
     /** List items keep white text, so their selection uses a dark focus fill and white rim. */
     private GradientDrawable listSelection() {
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(10));
-        bg.setColor(0xFF34485C);
+        bg.setCornerRadius(dp(RowaMenuStyle.ROW_RADIUS_DP));
+        bg.setColor(0xFF35383E);
         bg.setStroke(dp(2), Color.WHITE);
         return bg;
     }
@@ -125,13 +121,12 @@ public final class AppAppearanceActivity extends Activity {
         b.setSingleLine(true);
         b.setEllipsize(TextUtils.TruncateAt.MARQUEE);
         b.setMarqueeRepeatLimit(1);
-        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, RowaMenuStyle.TEXT_SP);
         b.setBackground(rounded(false));
         b.setTextColor(Color.WHITE);
         b.setOnFocusChangeListener((v, focused) -> {
             b.setBackground(rounded(focused));
             b.setTextColor(focused ? Color.BLACK : Color.WHITE);
-            b.setSelected(focused);
             // Remote focus must never leave the bottom of a settings row clipped.
             if (focused && editorScroll != null && editorScroll.getVisibility() == View.VISIBLE) {
                 editorScroll.post(() -> {
@@ -143,6 +138,7 @@ public final class AppAppearanceActivity extends Activity {
             }
         });
         b.setFocusable(true);
+        RowaMenuMarquee.bind(b, b);
         return b;
     }
 
@@ -157,9 +153,9 @@ public final class AppAppearanceActivity extends Activity {
         loadApps();
         LinearLayout screen = vertical();
         screen.setBackgroundColor(0xFF101419);
-        screen.setPadding(dp(40), dp(25), dp(40), dp(25));
+        screen.setPadding(dp(24), dp(18), dp(24), dp(18));
         setContentView(screen);
-        TextView title = text(getString(R.string.app_appearance_title), 29, Color.WHITE);
+        TextView title = text(getString(R.string.app_appearance_title), 20, Color.WHITE);
         screen.addView(title, new LinearLayout.LayoutParams(-1, dp(48)));
 
         LinearLayout columns = new LinearLayout(this);
@@ -168,10 +164,10 @@ public final class AppAppearanceActivity extends Activity {
 
         LinearLayout left = vertical();
         left.setBackgroundResource(R.drawable.glass_panel);
-        left.getBackground().mutate().setAlpha(RowaVisualOptions.panelAlpha(this));
+        RowaMenuStyle.glass(left, this);
         left.setPadding(dp(10), dp(10), dp(10), dp(10));
         LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(0, -1, 0.42f);
-        llp.setMarginEnd(dp(18));
+        llp.setMarginEnd(dp(12));
         columns.addView(left, llp);
         left.addView(text(getString(R.string.app_appearance_select), 17, 0xFFCCD6E1),
                 new LinearLayout.LayoutParams(-1, dp(35)));
@@ -191,7 +187,7 @@ public final class AppAppearanceActivity extends Activity {
 
         editorPane = vertical();
         editorPane.setBackgroundResource(R.drawable.glass_panel);
-        editorPane.getBackground().mutate().setAlpha(RowaVisualOptions.panelAlpha(this));
+        RowaMenuStyle.glass(editorPane, this);
         editorPane.setPadding(dp(19), dp(13), dp(19), dp(13));
         columns.addView(editorPane, new LinearLayout.LayoutParams(0, -1, 0.58f));
 
@@ -208,7 +204,7 @@ public final class AppAppearanceActivity extends Activity {
         editorScroll.addView(editorControls, new android.widget.FrameLayout.LayoutParams(-1, -2));
         editorPane.addView(editorScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        editorTitle = text("", 20, Color.WHITE);
+        editorTitle = text("", 17, Color.WHITE);
         editorTitle.setSingleLine(true);
         editorTitle.setEllipsize(TextUtils.TruncateAt.END);
         editorControls.addView(editorTitle, new LinearLayout.LayoutParams(-1, dp(38)));
@@ -235,8 +231,8 @@ public final class AppAppearanceActivity extends Activity {
         for (int i = 0; i < actions.length; i++) {
             Button b = actions[i];
             b.setId(View.generateViewId());
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(49));
-            lp.bottomMargin = dp(7);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(RowaMenuStyle.ROW_DP));
+            lp.bottomMargin = dp(6);
             editorControls.addView(b, lp);
             b.setNextFocusLeftId(appList.getId());
             if (i > 0) b.setNextFocusUpId(actions[i - 1].getId());

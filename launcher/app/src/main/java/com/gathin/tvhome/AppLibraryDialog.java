@@ -159,10 +159,12 @@ final class AppLibraryDialog {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(12), dp(8), dp(12), dp(12));
         panel.setBackgroundResource(R.drawable.glass_panel);
+        RowaMenuStyle.glass(panel, activity);
         View decor = activity.getWindow().getDecorView();
         catalogWidth = Math.min(dp(800), Math.max(dp(200), decor.getWidth() - dp(64)));
         int width = catalogWidth;
-        int height = dp(280);
+        int height = Math.min(dp(280),
+                Math.max(dp(160), activity.getResources().getDisplayMetrics().heightPixels - dp(36)));
         popup = new PopupWindow(panel, width, height, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);
@@ -345,12 +347,13 @@ final class AppLibraryDialog {
 
     private void showCatalog() {
         stopHighlight();
-        resize(catalogWidth, dp(280));
+        resize(catalogWidth, Math.min(dp(280),
+                Math.max(dp(160), activity.getResources().getDisplayMetrics().heightPixels - dp(36))));
         panel.removeAllViews();
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(12), dp(4), dp(8), dp(4));
-        TextView title = text(activity.getString(R.string.app_library), 22, Color.WHITE);
+        TextView title = text(activity.getString(R.string.app_library), 20, Color.WHITE);
         header.addView(title, new LinearLayout.LayoutParams(0, dp(36), 1));
         title.setGravity(Gravity.CENTER_VERTICAL);
         title.setSingleLine(true);
@@ -513,6 +516,7 @@ final class AppLibraryDialog {
         if (spring != null) spring.cancel();
         View menuPanel = activity.getLayoutInflater().inflate(R.layout.popup_inputs, panel, false);
         LinearLayout rows = menuPanel.findViewById(R.id.rows);
+        RowaMenuStyle.glass(menuPanel, activity);
         PopupWindow menu = new PopupWindow(menuPanel, dp(220), ViewGroup.LayoutParams.WRAP_CONTENT, true);
         actionPopup = menu;
         menu.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -540,11 +544,25 @@ final class AppLibraryDialog {
         for (int i = 0; i < rows.getChildCount(); i++) {
             TextView title = rows.getChildAt(i).findViewById(R.id.title);
             menuWidth = Math.max(menuWidth, (int) Math.ceil(title.getPaint().measureText(title.getText().toString())) + dp(58));
-            title.setEllipsize(TextUtils.TruncateAt.END);
+            // The action rows already use the shared focus-aware marquee.
         }
         menuWidth = Math.min(menuWidth, panel.getWidth() - dp(24));
         menu.setWidth(menuWidth);
         menuPanel.measure(View.MeasureSpec.makeMeasureSpec(menuWidth, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED);
+        int naturalHeight = menuPanel.getMeasuredHeight();
+        int availableHeight = Math.max(dp(92), panel.getHeight() - dp(24));
+        if (naturalHeight > availableHeight) {
+            android.widget.ScrollView scroll = menuPanel.findViewById(R.id.popupScroll);
+            if (scroll != null) {
+                ViewGroup.LayoutParams scrollLayout = scroll.getLayoutParams();
+                scrollLayout.height = Math.max(dp(42), availableHeight - (naturalHeight - scroll.getMeasuredHeight()));
+                scroll.setLayoutParams(scrollLayout);
+                menuPanel.measure(View.MeasureSpec.makeMeasureSpec(menuWidth, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(availableHeight, View.MeasureSpec.AT_MOST));
+                naturalHeight = Math.min(availableHeight, menuPanel.getMeasuredHeight());
+                menu.setHeight(naturalHeight);
+            }
+        }
         int[] location = new int[2];
         anchor.getLocationOnScreen(location);
         int[] panelLocation = new int[2];
@@ -552,7 +570,7 @@ final class AppLibraryDialog {
         Rect screen = new Rect(panelLocation[0], panelLocation[1],
                 panelLocation[0] + panel.getWidth(), panelLocation[1] + panel.getHeight());
         int x = Math.max(screen.left + dp(12), Math.min(location[0] + anchor.getWidth() - dp(12), screen.right - menuWidth - dp(12)));
-        int y = Math.max(screen.top + dp(12), Math.min(location[1] + dp(8), screen.bottom - menuPanel.getMeasuredHeight() - dp(12)));
+        int y = Math.max(screen.top + dp(12), Math.min(location[1] + dp(8), screen.bottom - naturalHeight - dp(12)));
         menuPanel.setAlpha(0f);
         menuPanel.setPivotY(0f);
         menuPanel.setScaleY(0.92f);
@@ -571,6 +589,7 @@ final class AppLibraryDialog {
         row.findViewById(R.id.dot).setVisibility(View.GONE);
         row.findViewById(R.id.status).setVisibility(View.GONE);
         row.setOnClickListener(v -> action.run());
+        RowaMenuMarquee.bind(row, (TextView) row.findViewById(R.id.title));
         rows.addView(row);
         row.setOnKeyListener((v, key, event) -> {
             int index = rows.indexOfChild(v);

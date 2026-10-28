@@ -8,9 +8,18 @@
     android:padding="6dp"
     android:elevation="12dp">
 
-    <LinearLayout
-        android:id="@+id/rows"
+    <ScrollView
+        android:id="@+id/popupScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical" />
+        android:focusable="false"
+        android:fillViewport="false"
+        android:scrollbars="none"
+        android:clipToPadding="false">
+        <LinearLayout
+            android:id="@+id/rows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
 </LinearLayout>
