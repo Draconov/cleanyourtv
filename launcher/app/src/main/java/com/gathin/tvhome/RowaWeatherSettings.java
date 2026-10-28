@@ -102,12 +102,7 @@ final class RowaWeatherSettings {
                 String region = first.optString("country", "");
                 if (!region.isEmpty()) fullName += ", " + region;
                 String finalName = fullName;
-                activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                        .putString("name", finalName)
-                        .putString("lat", String.format(Locale.US, "%.5f", lat))
-                        .putString("lon", String.format(Locale.US, "%.5f", lon))
-                        .putBoolean("device", false).apply();
-                invalidate();
+                saveCity(activity, finalName, lat, lon);
                 activity.runOnUiThread(() -> {
                     Toast.makeText(activity, finalName, Toast.LENGTH_LONG).show();
                     update(activity, activity.findViewById(R.id.rowaWeather));
@@ -163,13 +158,18 @@ final class RowaWeatherSettings {
         worker.start();
     }
 
-    static void selectResolvedCity(Activity activity, CityHit city) {
-        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString("name", city.display)
-                .putString("lat", String.format(Locale.US, "%.5f", city.lat))
-                .putString("lon", String.format(Locale.US, "%.5f", city.lon))
+    /** Shared persistence for typed and autocomplete city selection; do not change preference keys. */
+    private static void saveCity(Context context, String name, double latitude, double longitude) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString("name", name)
+                .putString("lat", String.format(Locale.US, "%.5f", latitude))
+                .putString("lon", String.format(Locale.US, "%.5f", longitude))
                 .putBoolean("device", false).apply();
         invalidate();
+    }
+
+    static void selectResolvedCity(Activity activity, CityHit city) {
+        saveCity(activity, city.display, city.lat, city.lon);
         update(activity, activity.findViewById(R.id.rowaWeather));
     }
 

@@ -440,6 +440,20 @@ final class AppLibraryDialog {
         });
     }
 
+    /** Keep a selected card at the same visual scroll offset after rebuilding the catalogue. */
+    private int selectionOffset(int position) {
+        if (catalog == null || catalog.getLayoutManager() == null) return 0;
+        RecyclerView.ViewHolder holder = catalog.findViewHolderForAdapterPosition(position);
+        if (holder == null) return 0;
+        View card = holder.itemView;
+        RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) card.getLayoutParams();
+        return rtl
+                ? catalog.getWidth() - catalog.getPaddingRight()
+                    - catalog.getLayoutManager().getDecoratedRight(card) - params.rightMargin
+                : catalog.getLayoutManager().getDecoratedLeft(card)
+                    - params.leftMargin - catalog.getPaddingLeft();
+    }
+
     private void changeHome(ResolveInfo app, boolean add) {
         if (!LibraryApps.save(activity, app.activityInfo.packageName, add)) {
             Toast.makeText(activity, R.string.library_save_failed, Toast.LENGTH_LONG).show();
@@ -453,16 +467,7 @@ final class AppLibraryDialog {
         }
         selectedOffset = 0;
         if (add && catalog != null) {
-            RecyclerView.ViewHolder holder = catalog.findViewHolderForAdapterPosition(selectedPosition);
-            if (holder != null) {
-                View card = holder.itemView;
-                RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) card.getLayoutParams();
-                selectedOffset = rtl
-                        ? catalog.getWidth() - catalog.getPaddingRight()
-                            - catalog.getLayoutManager().getDecoratedRight(card) - params.rightMargin
-                        : catalog.getLayoutManager().getDecoratedLeft(card)
-                            - params.leftMargin - catalog.getPaddingLeft();
-            }
+            selectedOffset = selectionOffset(selectedPosition);
             // Advance through missing shortcuts instead of following the newly checked app
             // into the Home group. Preserve its screen slot when the catalogue is rebuilt.
             int next = LibraryApps.nextFocus(selectedPosition, apps.size(),
@@ -482,16 +487,7 @@ final class AppLibraryDialog {
         int next = add ? -1 : LibraryApps.nextAfterRemoval(position, apps.size());
         selectedOffset = 0;
         if (!add && catalog != null) {
-            RecyclerView.ViewHolder holder = catalog.findViewHolderForAdapterPosition(position);
-            if (holder != null) {
-                View card = holder.itemView;
-                RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) card.getLayoutParams();
-                selectedOffset = rtl
-                        ? catalog.getWidth() - catalog.getPaddingRight()
-                            - catalog.getLayoutManager().getDecoratedRight(card) - params.rightMargin
-                        : catalog.getLayoutManager().getDecoratedLeft(card)
-                            - params.leftMargin - catalog.getPaddingLeft();
-            }
+            selectedOffset = selectionOffset(position);
         }
         selectedPackage = next >= 0 ? apps.get(next).activityInfo.packageName : app.activityInfo.packageName;
     }

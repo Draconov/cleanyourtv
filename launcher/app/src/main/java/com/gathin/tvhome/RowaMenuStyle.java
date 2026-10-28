@@ -7,7 +7,6 @@ import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.widget.ScrollView;
-import android.widget.TextView;
 
 /** Consistent ROWA glass menu styling; all values are Android dp/sp, never screen pixels. */
 final class RowaMenuStyle {
@@ -50,7 +49,4 @@ final class RowaMenuStyle {
         });
     }
 
-    static void marquee(View row, TextView title) {
-        RowaMenuMarquee.bind(row, title);
-    }
 }

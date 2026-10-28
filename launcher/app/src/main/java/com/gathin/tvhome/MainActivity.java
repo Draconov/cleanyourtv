@@ -408,7 +408,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         public void run() {
             updateGreeting();
             updateRace();
-            RowaWeather.update(MainActivity.this, rowaWeather);
+            RowaWeatherSettings.update(MainActivity.this, rowaWeather);
             // The pill follows the network callbacks and each return to Home; only the diya's flame follows the
             // signal level, so only it needs this minute's binder calls (about 7 ms on the UI thread).
             if (festive) updateWifiLabel();
@@ -1022,7 +1022,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 if (!isFinishing() && !isDestroyed()) rowaShowAppearanceMenu(restoreRowaMenu);
             }, 130);
         }
-        RowaWeather.update(this, rowaWeather);
+        RowaWeatherSettings.update(this, rowaWeather);
         sky.update();
         wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
@@ -2992,9 +2992,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         stats.setSingleLine(true);
     }
 
-    /** Mirrors CleanYourTV's own addSettingsMenuRow, but accepts a dynamic string label. */
+    /** Shared settings dropdown row builder for resource-backed and dynamic labels. */
     private View rowaAddSettingsStyleRow(LinearLayout rows, PopupWindow popup,
-                                          String title, Runnable action) {
+                                          CharSequence title, Runnable action) {
         View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
         row.findViewById(R.id.icon).setVisibility(View.GONE);
         row.findViewById(R.id.dot).setVisibility(View.GONE);
@@ -4479,33 +4479,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private void addSettingsMenuRow(LinearLayout rows, PopupWindow popup, int title, Runnable action) {
-        View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
-        row.findViewById(R.id.icon).setVisibility(View.GONE);
-        row.findViewById(R.id.dot).setVisibility(View.GONE);
-        row.findViewById(R.id.status).setVisibility(View.GONE);
-        ((TextView) row.findViewById(R.id.title)).setText(title);
-        row.setOnClickListener(v -> {
-            popup.dismiss();
-            action.run();
-        });
-        // The OK-up after opening the menu must not activate its first row.
-        final boolean[] pressed = {false};
-        row.setOnKeyListener((v, code, event) -> {
-            if (code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER) return false;
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (event.getRepeatCount() == 0) pressed[0] = true;
-                return true;
-            }
-            boolean activate = pressed[0];
-            pressed[0] = false;
-            if (activate) {
-                popup.dismiss();
-                action.run();
-            }
-            return true;
-        });
-        RowaMenuMarquee.bind(row, (TextView) row.findViewById(R.id.title));
-        rows.addView(row);
+        // The same D-pad guards, marquee, and glass-row layout used by dynamic labels.
+        rowaAddSettingsStyleRow(rows, popup, getString(title), action);
     }
 
     /**

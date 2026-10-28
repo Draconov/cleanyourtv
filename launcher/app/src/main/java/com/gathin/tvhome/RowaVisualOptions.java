@@ -124,23 +124,6 @@ final class RowaVisualOptions {
         for (File file : images(context)) if (!file.delete())
             Log.w("ROWA_V15", "Unable to delete custom wallpaper: " + file.getName());
     }
-    static void choose(Activity activity, int requestCode) {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.setType("image/*");
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-        try {
-            activity.startActivityForResult(intent, requestCode);
-        } catch (android.content.ActivityNotFoundException noDocumentProvider) {
-            // Some Google/Android TV builds omit ACTION_OPEN_DOCUMENT entirely.
-            Intent fallback = new Intent(Intent.ACTION_GET_CONTENT);
-            fallback.setType("image/*");
-            fallback.addCategory(Intent.CATEGORY_OPENABLE);
-            fallback.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-            activity.startActivityForResult(fallback, requestCode);
-        }
-    }
-
     /**
      * Replace wallpapers in one user-confirmed operation. All selected images are first decoded
      * and saved in a staging directory; an invalid/inaccessible image leaves the old set intact.
@@ -225,36 +208,6 @@ final class RowaVisualOptions {
             else if (!file.delete()) Log.w("ROWA_V15", "Could not remove " + file.getName());
         }
         if (!directory.delete()) Log.w("ROWA_V15", "Could not remove " + directory.getName());
-    }
-
-    /** Import on a worker; image content is neither uploaded nor kept as a URI permission. */
-    static void importSelection(Activity activity, Intent data, Consumer<Integer> finished) {
-        final List<Uri> picked = new ArrayList<>();
-        if (data != null && data.getClipData() != null) {
-            for (int i=0; i<data.getClipData().getItemCount() && i<MAX_IMAGES; i++)
-                picked.add(data.getClipData().getItemAt(i).getUri());
-        } else if (data != null && data.getData() != null) picked.add(data.getData());
-        if (picked.isEmpty()) { finished.accept(0); return; }
-        Thread thread = new Thread(() -> {
-            int imported = 0;
-            File targetDir = folder(activity.getApplicationContext());
-            if (targetDir.isDirectory() || targetDir.mkdirs()) {
-                for (Uri uri : picked) {
-                    if (images(activity).size() >= MAX_IMAGES) break;
-                    try {
-                        if (saveOne(activity, targetDir, uri)) imported++;
-                    } catch (Exception | OutOfMemoryError failure) {
-                        Log.w("ROWA_V15", "Wallpaper import skipped", failure);
-                    }
-                }
-            }
-            final int count = imported;
-            new Handler(Looper.getMainLooper()).post(() -> {
-                if (!activity.isDestroyed() && !activity.isFinishing()) finished.accept(count);
-            });
-        }, "rowa-wallpaper-import");
-        thread.setDaemon(true);
-        thread.start();
     }
 
     private static boolean saveOne(Context ctx, File directory, Uri uri) throws Exception {

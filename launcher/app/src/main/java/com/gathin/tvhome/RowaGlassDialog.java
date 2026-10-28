@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
@@ -26,14 +25,6 @@ final class RowaGlassDialog {
         return Math.round(v * a.getResources().getDisplayMetrics().density);
     }
 
-    private static GradientDrawable background(Activity a, boolean focused) {
-        GradientDrawable d = new GradientDrawable();
-        d.setColor(focused ? 0xFFF1F4F6 : 0xD6262B34);
-        d.setCornerRadius(dp(a, RowaMenuStyle.ROW_RADIUS_DP));
-        d.setStroke(dp(a, focused ? 2 : 1), focused ? Color.WHITE : 0x35FFFFFF);
-        return d;
-    }
-
     static TextView row(Activity a, CharSequence label) {
         TextView t = new TextView(a);
         t.setText(label);
@@ -46,9 +37,9 @@ final class RowaGlassDialog {
         t.setPadding(dp(a, 14), 0, dp(a, 14), 0);
         t.setFocusable(true);
         t.setClickable(true);
-        t.setBackground(background(a, false));
+        t.setBackground(RowaMenuStyle.row(a, false));
         t.setOnFocusChangeListener((v, focused) -> {
-            t.setBackground(background(a, focused));
+            t.setBackground(RowaMenuStyle.row(a, focused));
             t.setTextColor(focused ? Color.BLACK : Color.WHITE);
         });
         // The same focus-only marquee/pause used by the launcher's other dropdowns.
@@ -178,7 +169,7 @@ final class RowaGlassDialog {
         edit.setTextSize(17);
         edit.setSelectAllOnFocus(true);
         edit.setPadding(dp(a, 13), dp(a, 10), dp(a, 13), dp(a, 10));
-        edit.setBackground(background(a, false));
+        edit.setBackground(RowaMenuStyle.row(a, false));
         body.addView(edit, new LinearLayout.LayoutParams(-1, dp(a, 52)));
         Dialog dialog = show(a, title, body, a.getString(android.R.string.ok), accept,
                 neutral, alternative);
