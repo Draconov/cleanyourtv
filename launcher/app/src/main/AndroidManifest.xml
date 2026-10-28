@@ -1,123 +1,123 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:ns0="http://schemas.android.com/apk/res/android" xmlns:ns1="http://schemas.android.com/tools">
-    <uses-permission ns0:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
-    <uses-permission ns0:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission ns0:name="android.permission.READ_EXTERNAL_STORAGE" ns0:maxSdkVersion="32" />
-    <uses-permission ns0:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission ns0:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission ns0:name="android.permission.DUMP" />
-    <uses-permission ns0:name="android.permission.PACKAGE_USAGE_STATS" />
-    <uses-permission ns0:name="android.permission.INTERNET" />
-    <uses-feature ns0:name="android.software.leanback" ns0:required="false" />
-    <uses-feature ns0:name="android.hardware.touchscreen" ns0:required="false" />
-    <uses-feature ns0:name="android.hardware.wifi" ns0:required="false" />
-    <uses-feature ns0:name="android.hardware.location.gps" ns0:required="false" />
-    <uses-permission ns0:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission ns0:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission ns0:name="android.permission.ACCESS_FINE_LOCATION" ns1:ignore="CoarseFineLocation" />
-    <uses-permission ns0:name="android.permission.WRITE_SECURE_SETTINGS" ns1:ignore="ProtectedPermissions" />
-    <uses-permission ns0:name="yandex.tv.permission.ACCESS_TV_SOURCE" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.DUMP" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:ignore="CoarseFineLocation" />
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="yandex.tv.permission.ACCESS_TV_SOURCE" />
     <queries>
         <intent>
-            <action ns0:name="android.settings.SETTINGS" />
+            <action android:name="android.settings.SETTINGS" />
         </intent>
         <intent>
-            <action ns0:name="android.settings.WIFI_SETTINGS" />
+            <action android:name="android.settings.WIFI_SETTINGS" />
         </intent>
         <intent>
-            <action ns0:name="android.settings.DISPLAY_SETTINGS" />
+            <action android:name="android.settings.DISPLAY_SETTINGS" />
         </intent>
         <intent>
-            <action ns0:name="android.settings.MANAGE_APPLICATIONS_SETTINGS" />
+            <action android:name="android.settings.MANAGE_APPLICATIONS_SETTINGS" />
         </intent>
         <intent>
-            <action ns0:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
-            <data ns0:scheme="package" />
+            <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+            <data android:scheme="package" />
         </intent>
         <intent>
-            <action ns0:name="android.intent.action.MAIN" />
-            <category ns0:name="android.intent.category.LAUNCHER" />
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
         <intent>
-            <action ns0:name="android.intent.action.MAIN" />
-            <category ns0:name="android.intent.category.LEANBACK_LAUNCHER" />
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
         </intent>
         <intent>
-            <action ns0:name="android.intent.action.MAIN" />
-            <category ns0:name="com.gathin.tvhome.category.DOCK_CARD" />
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="com.gathin.tvhome.category.DOCK_CARD" />
         </intent>
         <intent>
-            <action ns0:name="android.intent.action.MAIN" />
-            <category ns0:name="android.intent.category.HOME" />
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
         </intent>
-        <package ns0:name="com.xiaomi.mitv.settings" />
-        <package ns0:name="com.tcl.settings" />
-        <package ns0:name="com.amazon.tv.launcher" />
-        <provider ns0:authorities="com.skyworth.tv.provider" />
-        <provider ns0:authorities="com.skyworth.tv.sdk.provider" />
-        <package ns0:name="com.google.android.youtube.tv" />
+        <package android:name="com.xiaomi.mitv.settings" />
+        <package android:name="com.tcl.settings" />
+        <package android:name="com.amazon.tv.launcher" />
+        <provider android:authorities="com.skyworth.tv.provider" />
+        <provider android:authorities="com.skyworth.tv.sdk.provider" />
+        <package android:name="com.google.android.youtube.tv" />
     </queries>
-    <application ns0:label="@string/app_name" ns0:icon="@mipmap/ic_launcher" ns0:banner="@drawable/banner" ns0:theme="@style/Theme.TvHome" ns0:allowBackup="false" ns0:localeConfig="@xml/locales_config">
-        <activity ns0:name=".MainActivity" ns0:exported="true" ns0:launchMode="singleTask" ns0:stateNotNeeded="true" ns0:excludeFromRecents="true" ns0:clearTaskOnLaunch="true" ns0:configChanges="orientation|screenSize|keyboard|keyboardHidden|uiMode" ns0:screenOrientation="landscape">
+    <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:banner="@drawable/banner" android:theme="@style/Theme.TvHome" android:allowBackup="false" android:localeConfig="@xml/locales_config">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:stateNotNeeded="true" android:excludeFromRecents="true" android:clearTaskOnLaunch="true" android:configChanges="orientation|screenSize|keyboard|keyboardHidden|uiMode" android:screenOrientation="landscape">
             <intent-filter>
-                <action ns0:name="android.intent.action.MAIN" />
-                <category ns0:name="android.intent.category.HOME" />
-                <category ns0:name="android.intent.category.DEFAULT" />
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <intent-filter>
-                <action ns0:name="android.intent.action.MAIN" />
-                <category ns0:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <activity ns0:name=".LauncherSettingsActivity" ns0:exported="false" ns0:excludeFromRecents="true" ns0:screenOrientation="landscape" ns0:theme="@style/Theme.TvHome.GlassSettings" />
-        <activity ns0:name=".InputsRequestActivity" ns0:exported="true" ns0:enabled="false" ns0:excludeFromRecents="true" ns0:noHistory="true" ns0:theme="@android:style/Theme.NoDisplay">
-            <intent-filter>
-                <action ns0:name="com.android.tv.action.VIEW_INPUTS" />
-                <category ns0:name="android.intent.category.DEFAULT" />
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity ns0:name=".QuickSettingsActivity" ns0:exported="false" ns0:taskAffinity="" ns0:launchMode="singleTop" ns0:excludeFromRecents="true" ns0:noHistory="true" ns0:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
-        <activity ns0:name=".HomeSettingsActivity" ns0:exported="false" ns0:taskAffinity="" ns0:excludeFromRecents="true" ns0:theme="@android:style/Theme.NoDisplay" />
-        <service ns0:name=".HomeKeyService" ns0:label="@string/home_key_name" ns0:directBootAware="true" ns0:exported="true" ns0:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+        <activity android:name=".LauncherSettingsActivity" android:exported="false" android:excludeFromRecents="true" android:screenOrientation="landscape" android:theme="@style/Theme.TvHome.GlassSettings" />
+        <activity android:name=".InputsRequestActivity" android:exported="true" android:enabled="false" android:excludeFromRecents="true" android:noHistory="true" android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
-                <action ns0:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data ns0:name="android.accessibilityservice" ns0:resource="@xml/home_key_service" />
-        </service>
-        <activity ns0:name=".AppLaunchActivity" ns0:exported="true" ns0:excludeFromRecents="true" ns0:noHistory="true" ns0:theme="@android:style/Theme.NoDisplay">
-            <intent-filter>
-                <action ns0:name="android.intent.action.VIEW" />
-                <category ns0:name="android.intent.category.DEFAULT" />
-                <category ns0:name="android.intent.category.BROWSABLE" />
-                <data ns0:scheme="market" ns0:host="launch" />
+                <action android:name="com.android.tv.action.VIEW_INPUTS" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
-        <activity ns0:name=".ClockActivity" ns0:exported="false" ns0:excludeFromRecents="true" ns0:noHistory="true" ns0:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
-        <activity ns0:name=".ProbeActivity" ns0:exported="false" ns0:excludeFromRecents="true" ns0:noHistory="true" ns0:taskAffinity="" ns0:theme="@android:style/Theme.Translucent.NoTitleBar" />
-        <service ns0:name=".ClockDream" ns0:label="@string/dream_name" ns0:exported="true" ns0:permission="android.permission.BIND_DREAM_SERVICE">
+        <activity android:name=".QuickSettingsActivity" android:exported="false" android:taskAffinity="" android:launchMode="singleTop" android:excludeFromRecents="true" android:noHistory="true" android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
+        <activity android:name=".HomeSettingsActivity" android:exported="false" android:taskAffinity="" android:excludeFromRecents="true" android:theme="@android:style/Theme.NoDisplay" />
+        <service android:name=".HomeKeyService" android:label="@string/home_key_name" android:directBootAware="true" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
-                <action ns0:name="android.service.dreams.DreamService" />
-                <category ns0:name="android.intent.category.DEFAULT" />
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/home_key_service" />
+        </service>
+        <activity android:name=".AppLaunchActivity" android:exported="true" android:excludeFromRecents="true" android:noHistory="true" android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="market" android:host="launch" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".ClockActivity" android:exported="false" android:excludeFromRecents="true" android:noHistory="true" android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+        <activity android:name=".ProbeActivity" android:exported="false" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <service android:name=".ClockDream" android:label="@string/dream_name" android:exported="true" android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </service>
-        <provider ns0:name=".ThemeProvider" ns0:authorities="${applicationId}.theme" ns0:exported="true" ns0:permission="android.permission.WRITE_SECURE_SETTINGS" />
-        <service ns0:name=".GuardRevival" ns0:directBootAware="true" ns0:exported="true" ns0:label="@string/home_key_name" ns0:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+        <provider android:name=".ThemeProvider" android:authorities="${applicationId}.theme" android:exported="true" android:permission="android.permission.WRITE_SECURE_SETTINGS" />
+        <service android:name=".GuardRevival" android:directBootAware="true" android:exported="true" android:label="@string/home_key_name" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
-                <action ns0:name="android.service.notification.NotificationListenerService" />
+                <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
-        <receiver ns0:name=".GuardConfig" ns0:exported="true" ns0:permission="android.permission.WRITE_SECURE_SETTINGS">
+        <receiver android:name=".GuardConfig" android:exported="true" android:permission="android.permission.WRITE_SECURE_SETTINGS">
             <intent-filter>
-                <action ns0:name="com.gathin.tvhome.GUARD" />
+                <action android:name="com.gathin.tvhome.GUARD" />
             </intent-filter>
         </receiver>
-        <service ns0:name=".InputKeyService" ns0:exported="false" ns0:label="@string/app_name" ns0:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+        <service android:name=".InputKeyService" android:exported="false" android:label="@string/app_name" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
-                <action ns0:name="android.accessibilityservice.AccessibilityService" />
+                <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
-            <meta-data ns0:name="android.accessibilityservice" ns0:resource="@xml/input_key_service" />
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/input_key_service" />
         </service>
-        <activity ns0:name=".RowaDownloadsBrowserActivity" ns0:exported="false" ns0:excludeFromRecents="true" ns0:screenOrientation="landscape" />
-        <activity ns0:name=".AppAppearanceActivity" ns0:exported="false" ns0:excludeFromRecents="true" ns0:screenOrientation="landscape" />
+        <activity android:name=".RowaDownloadsBrowserActivity" android:exported="false" android:excludeFromRecents="true" android:screenOrientation="landscape" />
+        <activity android:name=".AppAppearanceActivity" android:exported="false" android:excludeFromRecents="true" android:screenOrientation="landscape" />
     </application>
 </manifest>

@@ -90,6 +90,8 @@ final class Config {
     final int lunarUtcOffset;
     /** The date on its own line under the clock instead of beside it (config.xml, date_below_clock). */
     final boolean dateBelowClock;
+    /** Optional BCP 47 launcher language tag (config.xml or theme config.json); empty follows the TV language. */
+    final String locale;
     /** Name after the greeting ("Good morning, Mr. Trịnh"); empty for the greeting alone. */
     final String greetingName;
     final boolean moduleCards;
@@ -260,7 +262,7 @@ final class Config {
                    List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, boolean ambientGlow, boolean appGlow, boolean fadeRows, int homeIdleClockMinutes,
                    boolean keyFilter, boolean dockGlass, String glowStyle, boolean wallpaperCaptions,
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
-                   Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean powerOnHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock) {
+                   Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean powerOnHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, String locale) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -291,6 +293,7 @@ final class Config {
         this.lunarDate = lunarDate;
         this.lunarUtcOffset = lunarUtcOffset;
         this.dateBelowClock = dateBelowClock;
+        this.locale = locale;
         this.greetingName = greetingName;
         this.moduleCards = moduleCards;
         this.reducedMotion = reducedMotion;
@@ -407,6 +410,7 @@ final class Config {
         boolean shamsi = res.getBoolean(R.bool.shamsi_date);
         boolean lunar = res.getBoolean(R.bool.lunar_date);
         int lunarOffset = -1;
+        String locale = res.getString(R.string.locale).trim();
         String greetingName = res.getString(R.string.greeting_name).trim();
         boolean moduleCards = res.getBoolean(R.bool.module_cards);
         boolean reducedMotion = res.getBoolean(R.bool.reduced_motion);
@@ -506,6 +510,7 @@ final class Config {
             shamsi = bool(json, "shamsi_date", shamsi);
             lunar = bool(json, "lunar_date", lunar);
             lunarOffset = integer(json, "lunar_utc_offset", lunarOffset, -1, 14);
+            locale = string(json, "locale", locale).trim();
             greetingName = string(json, "greeting_name", greetingName).trim();
             moduleCards = bool(json, "module_cards", moduleCards);
             reducedMotion = bool(json, "reduced_motion", reducedMotion);
@@ -643,7 +648,7 @@ final class Config {
                 dockBand, cinematicDots, cinematicWhiteFocus, wifiStatusColor, cinematicScrim, cinematicArt, wallpaperMoods, gamepadPassthrough,
                 consumeVolumeKeys, powerOnHome, wifiStatusWarnings, topBarApps, showGreeting, headerWhite, clockWallpaper,
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
-                dateBelowClock);
+                dateBelowClock, locale);
     }
 
     /**
