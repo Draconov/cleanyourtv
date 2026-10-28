@@ -58,7 +58,6 @@
     <string name="rowa_v15_wallpaper_error">Could not import image or gallery is full (maximum 8)</string>
     <string name="rowa_v15_offline">· offline</string>
     <string name="rowa_v15_offline_empty">Weather unavailable · offline</string>
-    <string name="rowa_v15_stale">· cached</string>
     <string name="rowa_v15_unavailable">Weather unavailable</string>
     <string name="rowa_browser_title">Choose backgrounds</string>
     <string name="rowa_browser_hint">Up/Down: browse photos · OK: select up to 8 · Left: image settings</string>

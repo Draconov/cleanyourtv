@@ -58,7 +58,6 @@
     <string name="rowa_v15_wallpaper_error">Не удалось добавить изображения или достигнут предел (8)</string>
     <string name="rowa_v15_offline">· нет сети</string>
     <string name="rowa_v15_offline_empty">Погода недоступна · нет сети</string>
-    <string name="rowa_v15_stale">· сохранено</string>
     <string name="rowa_v15_unavailable">Погода недоступна</string>
     <string name="rowa_browser_title">Выбор фоновых изображений</string>
     <string name="rowa_browser_hint">Вверх/вниз — фото · OK — выбрать до 8 · Влево — настройки изображения</string>

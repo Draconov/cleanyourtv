@@ -41,11 +41,13 @@ final class RowaWeatherOffline {
         android.content.SharedPreferences p = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String value = identity.equals(p.getString("identity", "")) ? p.getString("reading", "") : "";
         boolean disconnected = offline(activity);
+        // Keep a last-known reading visible after TV/launcher restart without
+        // showing an intrusive "saved/cached" suffix while weather refreshes.
+        // Still identify a genuinely disconnected TV as offline.
         badge.setText(value.isEmpty() ? (disconnected
                         ? activity.getString(R.string.rowa_v15_offline_empty)
                         : activity.getString(R.string.rowa_v15_unavailable))
-                : value + " " + activity.getString(disconnected
-                        ? R.string.rowa_v15_offline : R.string.rowa_v15_stale));
+                : (disconnected ? value + " " + activity.getString(R.string.rowa_v15_offline) : value));
         badge.setVisibility(View.VISIBLE);
         if (activity instanceof MainActivity) ((MainActivity) activity).rowaPolishHeader();
     }
