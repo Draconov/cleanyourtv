@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Gestiona totes les aplicacions</string>
+    <string name="rowa_open_app_settings">Obre la configuració d’aplicacions</string>
+    <string name="rowa_usage_access_recent">Accés a les dades d’ús</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Configuració Bluetooth no disponible; obre Comandaments i accessoris</string>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">ניהול כל האפליקציות</string>
+    <string name="rowa_open_app_settings">פתיחת הגדרות האפליקציות</string>
+    <string name="rowa_usage_access_recent">גישה לנתוני שימוש</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">הגדרות Bluetooth אינן זמינות; פתח שלטים ואביזרים</string>
+</resources>

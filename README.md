@@ -1,3 +1,50 @@
+## ROWA CleanYourTV — community fork (v15.13)
+
+An independent customization of the [original CleanYourTV](https://github.com/Gathin23/cleanyourtv), developed primarily for the ROWA 32R45 running Android 14. This is **not an official upstream release**. Android package identity is unchanged (`com.gathin.tvhome`), so existing installations can be updated when the signing certificate matches.
+
+### What this fork adds
+
+- **Consistent glass-style menus:** translucent launcher settings and dropdowns, remote-friendly selection lists, text entry, confirmations, visible focus and scrolling long labels. The same style extends to the weather city dialog, wallpaper folder picker, default wallpaper styles, startup-app chooser and advanced-effects warning.
+- **Wallpaper gallery:** built-in browsing of image folders, a compact single-column gallery, live previews, up to eight remembered wallpaper selections, and the ability to replace individual selections. Image filenames scroll when long.
+- **Per-image wallpaper styling:** Fill/Crop, Fit with a blurred or solid-colour background (including automatically sampled colour), or repeating Tile. Relevant controls appear for each mode, including blur, darkness and tile scale. Rotation is configurable by interval or Home key.
+- **Clock, weather and greeting:** independently adjustable typography, responsive weather placement, better icon sizing, city autocomplete, offline weather cache and a personalized greeting.
+- **Edit application appearance:** open it below *Reorder applications* in launcher settings; rename an app, assign your own image, copy the banner/icon from another installed app or reset changes. Custom art fills the tile without an additional in-card label. All changes are launcher-only; installed apps and package names remain unchanged.
+- **TV/remote integration:** Bluetooth accessory shortcuts, remote/Home and held-volume improvements, adjustable appearance and Windows ADB helpers (`Send-Downloads.ps1`, `Send-Backgrounds.ps1`, `Profile.ps1`).
+- **Translations:** original upstream locale resources retained; ROWA-specific strings consolidated into per-locale `rowa_strings.xml` files, with the fullest coverage in English, Russian and Ukrainian.
+
+### Build and install the ROWA launcher (Windows)
+
+Use **JDK 17**, **Android SDK Platform/Build Tools 34**, PowerShell and ADB, with Android TV/Google TV (Android 8.0 or newer). Enable debugging on the TV and authorize your computer. Run these commands from the **repository root**:
+
+```powershell
+.\Build-Install.ps1
+.\Build-Install.ps1 -Install -Device '192.168.1.50:5555'
+```
+
+Replace the example IP with the TV's current network ADB address. The first command builds only; the second builds, connects and installs if compilation succeeds. The ZIP supplies **source code, not a prebuilt APK**. First-time setup may require selecting CleanYourTV as the Home launcher. Keep the original Home launcher available until you've verified the replacement. To update an existing install, **use the same signing key**; do not uninstall a working launcher just to work around `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+
+For image imports, use **Launcher Appearance → Choose background images** and select an indexed Pictures or Download folder. For app artwork, use **Launcher Settings → Edit application appearance**. A replacement image or copied icon only changes the tile in CleanYourTV, not the underlying app or its launch destination.
+
+### Publish your own GitHub fork
+
+1. Use **Fork** on [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) and clone **your fork** (replace `YOUR-USERNAME` below).
+2. Copy the contents of this source package into the clone, preserving its `.git` directory and the original upstream directories (`addons`, `docs`, `examples`, `tests`, `themes`, `tools`, `.github`).
+3. Review `git status` and the changed launcher files; then commit and push:
+
+```bash
+git clone https://github.com/YOUR-USERNAME/cleanyourtv.git
+cd cleanyourtv
+git add -A
+git commit -m "Add ROWA launcher customization"
+git push origin main
+```
+
+If the fork's default branch is not `main`, substitute its actual branch. To publish through GitHub Desktop, copy the same files into the cloned fork, then commit and push there. **No personal ADB pairing keys, APK builds or local device logs should be committed.**
+
+### Compatibility and verification
+
+The included upstream snapshot is v3.1; the customized ROWA launcher grew from an earlier revision. Upstream-only files and original translations are preserved, but some new upstream v3.1 features requiring changes to the same Java classes **have not yet been fully integrated**. Java syntax, XML and archive checks do not replace an Android Gradle build and real TV testing. After installation check Home, remote buttons, Bluetooth shortcuts, app appearance changes and wallpaper rotation. The project's original MIT copyright and Outfit font license remain in place.
+
 <p align="center">
   <a href="https://cleanyour.tv"><img src="https://raw.githubusercontent.com/Gathin23/cleanyourtv/main/docs/banner.png" alt="CleanYourTV. Your TV, minus the ads. Strip the bloatware from any Android TV or Google TV over Wi-Fi and replace the ad-filled home screen with a clean launcher that looks like an Apple TV. No root, no cable, nothing uninstalled, and a one-line restore." width="800"></a>
 </p>

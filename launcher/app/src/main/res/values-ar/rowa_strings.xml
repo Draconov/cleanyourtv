@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">إدارة جميع التطبيقات</string>
+    <string name="rowa_open_app_settings">فتح إعدادات التطبيقات</string>
+    <string name="rowa_usage_access_recent">الوصول إلى بيانات الاستخدام</string>
+    <string name="rowa_bt_name">بلوتوث</string>
+    <string name="rowa_bt_unavailable">إعدادات البلوتوث غير متاحة؛ افتح أجهزة التحكم والملحقات</string>
+</resources>

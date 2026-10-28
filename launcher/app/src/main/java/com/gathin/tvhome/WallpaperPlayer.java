@@ -32,10 +32,15 @@ import java.util.concurrent.Executors;
 /** Displays and rotates a theme's local wallpaper images while Home is visible. */
 final class WallpaperPlayer {
     private final FrameLayout root;
+    private final Context context;
+    private final boolean rowaCustom;
+    private final int themeDim;
     private final ImageView image;
     private final int backgroundColor;
     private final List<File> files;
-    private final long interval;
+    private final long interval; // Existing theme/user collection interval, prior to UI override.
+    private boolean advanceForHome;
+    private long lastHomeEventMs;
     private final String order;
     private final SharedPreferences preferences;
     private final ExecutorService decoder = Executors.newSingleThreadExecutor();
@@ -64,15 +69,25 @@ final class WallpaperPlayer {
 
     WallpaperPlayer(Context context, FrameLayout root, Config config) {
         this.root = root;
+        this.context = context.getApplicationContext();
+        this.themeDim = config.wallpaperDim;
         backgroundColor = config.backgroundColor;
         files = new ArrayList<>(config.wallpapers);
-        interval = config.wallpaperRotationMinutes * 60_000L;
-        bitmapConfig = config.wallpaperTrueColor ? Bitmap.Config.ARGB_8888 : Bitmap.Config.RGB_565;
+        // ROWA_V15: reuse the existing wallpaper decoder/rotator, never stack a second bitmap layer.
+        List<File> userWallpapers = RowaVisualOptions.images(context);
+        boolean rowaHasWallpapers = !userWallpapers.isEmpty();
+        this.rowaCustom = rowaHasWallpapers;
+        if (rowaHasWallpapers) {
+            files.clear();
+            files.addAll(userWallpapers);
+        }
+        interval = (rowaHasWallpapers ? Math.max(30, config.wallpaperRotationMinutes) : config.wallpaperRotationMinutes) * 60_000L;
+        bitmapConfig = rowaHasWallpapers ? Bitmap.Config.RGB_565 : (config.wallpaperTrueColor ? Bitmap.Config.ARGB_8888 : Bitmap.Config.RGB_565);
         // The dim is painted into the picture (decode), so no full-screen shade layer is drawn on every frame.
         dimColor = config.wallpaperDim > 0 ? (config.wallpaperDim * 255 / 100) << 24 : 0;
         order = config.wallpaperOrder;
         preferences = context.getSharedPreferences("wallpaper_rotation", Context.MODE_PRIVATE);
-        moods = config.wallpaperMoods;
+        moods = rowaHasWallpapers ? Collections.emptyMap() : config.wallpaperMoods;
         latitude = moods.isEmpty() ? "" : context.getString(R.string.latitude);
         longitude = moods.isEmpty() ? "" : context.getString(R.string.longitude);
         // Playback state belongs to one collection. Changing the collection starts from its first
@@ -88,10 +103,10 @@ final class WallpaperPlayer {
         image = new ImageView(context);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        names = config.wallpaperCaptions && config.wallpaperEnabled && !files.isEmpty()
+        names = !rowaHasWallpapers && config.wallpaperCaptions && config.wallpaperEnabled && !files.isEmpty()
                 ? WallpaperCaptions.read(files.get(0).getParentFile()) : Collections.emptyMap();
         caption = names.isEmpty() ? null : makeCaption(context, root);
-        if (config.wallpaperEnabled && !files.isEmpty()) {
+        if ((config.wallpaperEnabled || rowaHasWallpapers) && !files.isEmpty()) {
             root.addView(image, 0, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             showFirst();
@@ -104,6 +119,9 @@ final class WallpaperPlayer {
      * Only the later changes of a rotation decode in the background.
      */
     private void showFirst() {
+        // ROWA v15.6: composition and blur are done off the UI thread. The first
+        // frame is the theme's solid fallback; start() schedules the image decode.
+        if (rowaCustom) return;
         String previous = preferences.getString("image", "");
         List<File> playable = playable();
         File first = WallpaperRotation.find(playable, previous);
@@ -135,6 +153,21 @@ final class WallpaperPlayer {
 
     void stop() {
         active = false;
+    }
+
+    /** Home button is an explicit choice, not a timer tick. Suppress duplicated firmware redirects. */
+    void onHomePressed() {
+        if (RowaWallpaperRotation.get(context) != RowaWallpaperRotation.ON_HOME || files.size() < 2) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (now - lastHomeEventMs < 750L) return;
+        lastHomeEventMs = now;
+        advanceForHome = true;
+        if (active) update();
+    }
+
+    void onRotationSettingChanged() {
+        advanceForHome = false;
+        if (active) update();
     }
 
     /** Drops the wallpaper texture when Home is hidden and Android asks the process to free memory. */
@@ -172,7 +205,11 @@ final class WallpaperPlayer {
         List<File> playable = playable();
         File selected = WallpaperRotation.find(playable, previous);
         long changed = preferences.getLong("changed", 0);
-        if (selected == null || WallpaperRotation.due(changed, System.currentTimeMillis(), interval)) {
+        long effectiveInterval = RowaWallpaperRotation.interval(context, interval);
+        boolean forceChange = advanceForHome && playable.size() > 1;
+        advanceForHome = false;
+        if (selected == null || forceChange
+                || WallpaperRotation.due(changed, System.currentTimeMillis(), effectiveInterval)) {
             selected = WallpaperRotation.pick(playable, previous, order, random);
         }
         if (selected == null || selected.getName().equals(displayed)) return;
@@ -199,6 +236,9 @@ final class WallpaperPlayer {
                     preferences.edit().putString("image", displayed)
                             .putLong("changed", System.currentTimeMillis()).apply();
                 }
+                // If Home was pressed while an image was decoding, honor that press
+                // immediately instead of deferring it until the next minute tick.
+                if (advanceForHome) update();
             });
         });
     }
@@ -270,6 +310,16 @@ final class WallpaperPlayer {
     }
 
     private Bitmap decode(File file) {
+        if (rowaCustom) {
+            Bitmap rendered = RowaWallpaperRenderer.render(context, android.net.Uri.fromFile(file),
+                    width, height, RowaWallpaperStyle.forFile(context, file.getName()), themeDim);
+            if (rendered == null) return null;
+            try {
+                Bitmap gpu = rendered.copy(Bitmap.Config.HARDWARE, false);
+                if (gpu != null) { rendered.recycle(); return gpu; }
+            } catch (Exception | OutOfMemoryError ignored) { /* Keep the 16-bit bitmap. */ }
+            return rendered;
+        }
         try {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;

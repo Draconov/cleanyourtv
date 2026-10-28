@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Alle Apps verwalten</string>
+    <string name="rowa_open_app_settings">App-Einstellungen öffnen</string>
+    <string name="rowa_usage_access_recent">Zugriff auf Nutzungsdaten</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Bluetooth-Einstellungen nicht verfügbar; öffne Fernbedienungen &amp; Zubehör</string>
+</resources>

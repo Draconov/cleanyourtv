@@ -1,3 +1,35 @@
+## ROWA CleanYourTV — bản fork cộng đồng (v15.13)
+
+Bản tùy biến độc lập của [CleanYourTV gốc](https://github.com/Gathin23/cleanyourtv), chủ yếu dành cho ROWA 32R45 (Android 14). Đây **không phải bản phát hành chính thức**. Tên gói Android vẫn là `com.gathin.tvhome`.
+
+### Các tính năng ROWA bổ sung
+
+- Giao diện menu **kính mờ** thống nhất cho cài đặt launcher, nhập văn bản, tìm thành phố thời tiết, chọn thư mục và xác nhận; hỗ trợ remote và cuộn chữ dài.
+- Thư viện hình nền tích hợp: chọn thư mục, xem trước trực tiếp, ghi nhớ tối đa **tám ảnh** và thay từng ảnh đã chọn.
+- Cấu hình riêng cho từng ảnh: lấp đầy/cắt, vừa khung với nền mờ, nền màu đặc hoặc màu lấy tự động, hay lặp hình dạng ô. Có thể đổi ảnh theo thời gian hoặc phím Home.
+- Chỉnh cỡ chữ, vị trí đồng hồ/thời tiết, tìm thành phố, bộ nhớ đệm thời tiết ngoại tuyến và lời chào cá nhân.
+- **Chỉnh giao diện ứng dụng**, bên dưới **Sắp xếp lại ứng dụng**: đổi tên hiển thị, chọn ảnh, sao chép biểu tượng/banner từ ứng dụng khác hoặc đặt lại. Ảnh phủ toàn bộ thẻ mà không có tên lặp bên trong; APK và tên gói không thay đổi.
+- Phím tắt Bluetooth, cải thiện remote và tiện ích PowerShell/ADB. Giữ các bản dịch gốc; chuỗi ROWA được gộp trong `rowa_strings.xml`, đầy đủ nhất ở tiếng Anh, Nga và Ukraina.
+
+### Biên dịch và cài đặt (Windows)
+
+Cần Android TV/Google TV (Android 8.0+), JDK 17, Android SDK 34, PowerShell và ADB. Bật gỡ lỗi trên TV và cho phép máy tính kết nối. Tại thư mục gốc của kho mã:
+
+```powershell
+.\Build-Install.ps1
+.\Build-Install.ps1 -Install -Device '192.168.1.50:5555'
+```
+
+Thay IP mẫu bằng địa chỉ TV thực tế. Lệnh đầu chỉ biên dịch; lệnh sau cài đặt khi biên dịch thành công. Đây là **mã nguồn, không phải APK dựng sẵn**. Cập nhật ứng dụng hiện có cần cùng khóa ký; đừng gỡ launcher đang chạy chỉ để tránh lỗi chữ ký. Kiểm tra phím Home trước khi vô hiệu hóa launcher gốc.
+
+### Đăng bản fork lên GitHub
+
+1. Tạo **Fork** từ [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) và sao chép (clone) fork của bạn.
+2. Chép các tệp từ gói này vào thư mục clone, giữ `.git` và các thư mục gốc như `addons`, `docs`, `examples`, `tests`, `themes`, `tools`, `.github`.
+3. Kiểm tra `git status`, chạy `git add -A`, `git commit -m "Add ROWA launcher customization"`, `git push origin main` (đổi tên nhánh khi cần).
+
+Một số tính năng mới ở upstream v3.1 chưa được tích hợp hoàn toàn vì ROWA dựa trên mã launcher cũ hơn. Kiểm tra cú pháp không thay cho Gradle và thử nghiệm trực tiếp trên TV. Bản quyền và giấy phép gốc được giữ nguyên.
+
 <p align="center">
   <a href="https://cleanyour.tv"><img src="docs/banner.png" alt="CleanYourTV: trả lại cho TV một màn hình chính gọn gàng" width="800"></a>
 </p>

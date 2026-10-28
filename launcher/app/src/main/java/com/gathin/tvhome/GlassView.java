@@ -29,6 +29,20 @@ public class GlassView extends View {
     /** glass_style rim or halo: no sheen and no fill, only the crisp rim (and, for halo, a lighter outer glow). */
     private boolean flat;
     private boolean halo;
+    // ROWA_V15: text/rim remain legible; only the glass face changes opacity.
+    private int rowaSurfaceOpacity = -1;
+
+    void setSurfaceOpacity(int percent) {
+        int bounded = Math.max(35, Math.min(95, percent));
+        if (rowaSurfaceOpacity == bounded) return;
+        rowaSurfaceOpacity = bounded;
+        // Preserves the theme's shader colors and the original specular/rim treatment.
+        fill.setAlpha(Math.round(255f * bounded / 100f));
+        specular.setAlpha(Math.round(255f * bounded / 100f));
+        invalidate();
+    }
+    // ROWA_APPEARANCE_V6: extra outer-glow intensity, 0 is exactly the original style.
+    private int rowaGlowLevel;
 
     public GlassView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -65,11 +79,24 @@ public class GlassView extends View {
     void setStyle(String style) {
         flat = Config.GLASS_RIM.equals(style) || Config.GLASS_HALO.equals(style);
         halo = Config.GLASS_HALO.equals(style);
-        rim.setStrokeWidth((flat ? 2f : 1.5f) * density);
+        rowaUpdateRimWidth();
         invalidate();
     }
 
+    /** Repaints only the existing small cached glass slab. No new shader or service. */
+    void setGlowLevel(int level) {
+        int safe = Math.max(0, Math.min(3, level));
+        if (rowaGlowLevel == safe) return;
+        rowaGlowLevel = safe;
+        rowaUpdateRimWidth();
+        invalidate();
+    }
+
+    private void rowaUpdateRimWidth() {
+        rim.setStrokeWidth((flat ? 2f : 1.5f) * density * (1f + 0.30f * rowaGlowLevel));
+    }
     void setRadius(float px) {
+        if (radius == px) return; // ROWA_V15: identical radius needs no redraw
         radius = px;
         invalidate();
     }
@@ -93,6 +120,7 @@ public class GlassView extends View {
             int rings = 12;
             float step = inset / rings;
             int alpha = flat ? glowAlpha / 2 : glowAlpha;
+            alpha = Math.min(255, Math.round(alpha * (1f + 0.85f * rowaGlowLevel)));
             glow.setStrokeWidth(step + 0.5f);
             for (int i = 0; i < rings; i++) {
                 float o = step * (i + 0.5f);

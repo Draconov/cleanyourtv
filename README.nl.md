@@ -1,3 +1,35 @@
+## ROWA CleanYourTV — communityfork (v15.13)
+
+Onafhankelijke aanpassing van [de oorspronkelijke CleanYourTV](https://github.com/Gathin23/cleanyourtv), vooral voor de ROWA 32R45 (Android 14). **Geen officiële upstreamversie.** De Android-pakketnaam blijft `com.gathin.tvhome`.
+
+### Wat deze fork toevoegt
+
+- Consistente, doorschijnende **glasachtige menu's** voor launcherinstellingen, tekstinvoer, plaatskeuze voor het weer, mapselectie en bevestigingen, met afstandsbediening en schuivende lange labels.
+- Ingebouwde achtergrondgalerij met mappen, livevoorbeelden en maximaal **acht bewaarde selecties** die afzonderlijk te vervangen zijn.
+- Per afbeelding: vullen/bijsnijden, passend met vervaagde, effen of automatisch gekozen achtergrond, of herhalende tegels; wisselen op tijd of via Home.
+- Instelbare klok, weerinformatie, tekstgrootten, stadszoekfunctie, offline weercache en persoonlijke begroeting.
+- **App-uiterlijk bewerken**, onder **Apps herschikken**: de getoonde naam en tegelafbeelding aanpassen, een pictogram/banner van een andere app gebruiken of terugzetten. De afbeelding vult de hele tegel zonder extra tekst erin; geïnstalleerde apps blijven ongewijzigd.
+- Bluetooth-snelkoppelingen, betere afstandsbediening en PowerShell-/ADB-tools. Oorspronkelijke vertalingen behouden, ROWA-teksten samengevoegd in `rowa_strings.xml` (vooral Engels, Russisch en Oekraïens).
+
+### Bouwen en installeren (Windows)
+
+Vereist Android TV/Google TV (Android 8.0+), JDK 17, Android SDK 34, PowerShell en ADB. Schakel foutopsporing in op de tv en geef de pc toestemming. Voer uit vanuit de hoofdmap:
+
+```powershell
+.\Build-Install.ps1
+.\Build-Install.ps1 -Install -Device '192.168.1.50:5555'
+```
+
+Vervang het voorbeeldadres door het IP-adres van je tv. Het eerste commando bouwt alleen; het tweede installeert pas na een geslaagde build. Dit pakket bevat **broncode, geen APK**. Voor bijwerken is dezelfde ondertekeningssleutel nodig; verwijder een werkende launcher niet om een handtekeningfout te omzeilen. Controleer Home en de afstandsbediening voordat je de oorspronkelijke launcher uitschakelt.
+
+### Je fork op GitHub publiceren
+
+1. Maak een fork van [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) en clone die.
+2. Kopieer de inhoud van dit pakket naar je clone. Bewaar `.git` en alle oorspronkelijke mappen, waaronder `addons`, `docs`, `examples`, `tests`, `themes`, `tools` en `.github`.
+3. Bekijk `git status`, voer daarna `git add -A`, `git commit -m "Add ROWA launcher customization"` en `git push origin main` uit (pas de branch aan als die anders heet).
+
+ROWA bouwt voort op een oudere launcher: sommige upstream v3.1-functies zijn nog niet volledig geïntegreerd. Statische controles vervangen geen Gradle-build en tests op de tv. Oorspronkelijke copyrightinformatie en licenties blijven behouden.
+
 <p align="center">
   <a href="https://cleanyour.tv"><img src="https://raw.githubusercontent.com/Gathin23/cleanyourtv/main/docs/banner.png" alt="CleanYourTV. Je tv, zonder advertenties. Verwijder overbodige software van elke Android TV of Google TV via wifi en vervang het startscherm vol advertenties door een overzichtelijke launcher die eruitziet als Apple TV. Geen root, geen kabel, niets wordt verwijderd en herstellen kan met één opdracht." width="800"></a>
 </p>

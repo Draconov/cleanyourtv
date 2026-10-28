@@ -1,3 +1,35 @@
+## ROWA CleanYourTV — 社群分支 (v15.13)
+
+基於[原版 CleanYourTV](https://github.com/Gathin23/cleanyourtv)的獨立客製化版本，主要針對 ROWA 32R45（Android 14），**並非官方發行**。Android 套件名稱仍為 `com.gathin.tvhome`。
+
+### 本分支新增功能
+
+- 統一的半透明**玻璃風格選單**：桌面設定、文字輸入、天氣城市搜尋、桌布資料夾選擇及確認視窗；支援遙控器和長文字捲動。
+- 內建桌布圖庫：選擇資料夾、即時預覽，最多記住**八張**桌布，並可逐張替換。
+- 每張桌布的獨立設定：填滿／裁切、完整顯示搭配模糊／純色／自動取色背景，或重複拼貼；可定時或按 Home 鍵切換。
+- 時鐘與天氣字體、位置、城市搜尋、離線天氣快取和個人化問候。
+- **修改應用程式外觀**，位於**調整應用程式順序**下方：修改顯示名稱、選擇圖片、複製其他應用程式的圖示／橫幅或還原預設。圖片填滿卡片且不重複顯示卡片內名稱，不改動實際 APK 或套件名稱。
+- 藍牙捷徑、遙控器改進與 PowerShell／ADB 工具。完整保留原始翻譯；ROWA 字串集中至 `rowa_strings.xml`，以英文、俄文及烏克蘭文最完整。
+
+### 編譯和安裝（Windows）
+
+需要 Android TV／Google TV（Android 8.0+）、JDK 17、Android SDK 34、PowerShell 和 ADB。請在電視啟用偵錯、授權電腦，然後在儲存庫根目錄執行：
+
+```powershell
+.\Build-Install.ps1
+.\Build-Install.ps1 -Install -Device '192.168.1.50:5555'
+```
+
+將範例 IP 改成電視目前的位址。第一行僅編譯；第二行在編譯成功後安裝。本套件為**原始碼，不含已編譯 APK**。更新必須使用相同簽章金鑰；不要為了繞過簽章衝突而解除安裝正常使用中的桌面。確認 Home 按鍵後再考慮停用原本的桌面。
+
+### 將自己的分支發佈至 GitHub
+
+1. 在 [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) 點擊 **Fork**，然後複製（clone）自己的分支。
+2. 將本套件內容複製到複製的資料夾，保留 `.git` 以及原始 `addons`、`docs`、`examples`、`tests`、`themes`、`tools`、`.github` 目錄。
+3. 檢查 `git status`，依序執行 `git add -A`、`git commit -m "Add ROWA launcher customization"`、`git push origin main`（依實際分支名稱調整）。
+
+ROWA 是以較早期的桌面程式碼為基礎，部分上游 v3.1 新功能尚未完整整合。靜態檢查無法取代 Gradle 編譯和實際電視測試。原始版權與授權條款皆予以保留。
+
 <p align="center">
   <a href="https://cleanyour.tv"><img src="docs/banner.png" alt="CleanYourTV：讓電視主畫面回歸簡潔" width="800"></a>
 </p>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Gestionar todas las aplicaciones</string>
+    <string name="rowa_open_app_settings">Abrir ajustes de aplicaciones</string>
+    <string name="rowa_usage_access_recent">Acceso a datos de uso</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Ajustes de Bluetooth no disponibles; abre Mandos y accesorios</string>
+</resources>

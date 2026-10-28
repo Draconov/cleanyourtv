@@ -21,3 +21,22 @@ bench-results/
 *.aab
 launcher/hs_err_pid*.log
 launcher/replay_pid*.log
+
+# ROWA fork: local work, TV diagnostics, and private signing files
+.gradle/
+**/.gradle/
+**/build/
+local.properties
+.idea/
+.vscode/
+*.iml
+Build-*.log
+ROWA-performance-*.txt
+*.keystore
+*.jks
+*.pem
+*.p12
+*.pfx
+*.apk
+*.aab
+*.zip

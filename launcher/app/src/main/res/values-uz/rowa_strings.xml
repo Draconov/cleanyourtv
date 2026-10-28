@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Barcha ilovalarni boshqarish</string>
+    <string name="rowa_open_app_settings">Ilova sozlamalarini ochish</string>
+    <string name="rowa_usage_access_recent">Foydalanish maʼlumotlariga kirish</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Bluetooth sozlamalari mavjud emas; Pultlar va aksessuarlarni oching</string>
+</resources>

@@ -56,7 +56,6 @@
                 android:layout_width="3dp"
                 android:layout_height="13dp"
                 android:layout_marginEnd="10dp"
-                android:id="@+id/raceBar"
                 android:background="@drawable/race_bar" />
 
             <TextView
@@ -93,15 +92,6 @@
             android:textSize="12sp"
             android:fontFamily="@string/font_medium"
             android:letterSpacing="0.12" />
-
-        <!-- game_day: one dot per turn when the panel rotates between games (and the F1 weekend). -->
-        <LinearLayout
-            android:id="@+id/racePager"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:orientation="horizontal"
-            android:visibility="gone" />
     </LinearLayout>
 
     <!-- Cinematic top shelf: darkens the edge behind the shelf and the lower half, so the text and the
@@ -232,6 +222,26 @@
                         android:letterSpacing="0.08"
                         android:textAllCaps="true" />
 
+                    <!-- ROWA_WIDGETS_V1: weather next to the clock, optional, no location permission. -->
+                    <TextView
+                        android:id="@+id/rowaWeather"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:layout_marginStart="10dp"
+                        android:layout_marginBottom="8dp"
+                        android:paddingStart="9dp"
+                        android:paddingEnd="9dp"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp"
+                        
+                        android:singleLine="true"
+                        android:textColor="#E6FFFFFF"
+                        android:textSize="13sp"
+                        android:fontFamily="@string/font_medium"
+                        android:focusable="false"
+                        android:visibility="gone" />
+
                     <View
                         android:id="@+id/clockDivider"
                         android:layout_width="1dp"
@@ -293,7 +303,7 @@
                             android:ellipsize="end"
                             android:textColor="#80FFFFFF"
                             android:textSize="14sp"
-                            android:fontFamily="@string/font_regular"
+                            android:fontFamily="@font/outfit_regular"
                             android:letterSpacing="0.14"
                             android:textAllCaps="true"
                             android:visibility="gone" />
@@ -306,16 +316,21 @@
                  row; gone, it takes no space. -->
             <TextView
                 android:id="@+id/stats"
+                android:background="@drawable/rowa_stats_badge"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="5dp"
+                android:paddingBottom="5dp"
                 android:layout_width="wrap_content"
                 android:layout_below="@id/leftBlock"
                 android:layout_alignStart="@id/leftBlock"
                 android:gravity="left"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="7dp"
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:textColor="#D9FFFFFF"
-                android:textSize="14sp"
+                android:textSize="12sp"
                 android:fontFamily="@string/font_medium"
                 android:letterSpacing="0.04"
                 android:focusable="false"
@@ -347,14 +362,6 @@
                     android:ellipsize="end"
                     android:text="@string/wifi"
                     android:drawableStart="@drawable/ic_wifi"
-                    android:nextFocusDown="@+id/grid" />
-
-                <TextView
-                    android:id="@+id/btnVpn"
-                    style="@style/TopButton"
-                    android:visibility="gone"
-                    android:singleLine="true"
-                    android:text="@string/vpn"
                     android:nextFocusDown="@+id/grid" />
 
                 <TextView

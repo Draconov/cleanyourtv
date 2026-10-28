@@ -1,3 +1,35 @@
+## ROWA CleanYourTV — コミュニティフォーク (v15.13)
+
+[オリジナルの CleanYourTV](https://github.com/Gathin23/cleanyourtv)をベースにした独立カスタマイズ版です。主に ROWA 32R45（Android 14）向けであり、**公式リリースではありません**。Android パッケージ名は `com.gathin.tvhome` のままです。
+
+### ROWA 版で追加した機能
+
+- 半透明の**ガラス風メニュー**に設定画面、テキスト入力、天気の都市検索、フォルダー選択、確認ダイアログを統一。リモコン操作と長いラベルのスクロールに対応。
+- 壁紙ギャラリー：フォルダー選択、ライブプレビュー、最大**８枚**の選択状態を記憶し、１枚ずつ入れ替え可能。
+- 画像ごとの表示設定：切り抜き、ぼかし／単色／自動抽出色を背景にした全体表示、繰り返しタイル表示。時間または Home キーで切り替え。
+- 時計・天気の文字サイズ、配置、都市検索、オフラインキャッシュ、あいさつ文を調整。
+- **アプリの外観を編集**：設定の「アプリの並び替え」の下から、表示名やカード画像の変更、他アプリのアイコン／バナーのコピー、初期状態への復元が可能。変更はランチャー内だけで、APK やアプリの識別子は変わりません。
+- Bluetooth ショートカット、リモコン操作の改善、PowerShell／ADB ツール。元の翻訳は保持し、ROWA 専用文言を `rowa_strings.xml` に統合しました（主に英語・ロシア語・ウクライナ語）。
+
+### ビルドとインストール（Windows）
+
+Android TV／Google TV（Android 8.0 以降）、JDK 17、Android SDK 34、PowerShell、ADB が必要です。テレビのデバッグを有効にし、PC を許可してください。リポジトリのルートで実行します。
+
+```powershell
+.\Build-Install.ps1
+.\Build-Install.ps1 -Install -Device '192.168.1.50:5555'
+```
+
+サンプル IP はご自身のテレビの IP に置き換えてください。１行目はビルドのみ、２行目はビルドが成功した後にインストールします。配布物は**ソースコードであり APK は含みません**。既存アプリを更新するには同じ署名鍵が必要です。署名エラーを回避するために動作中のランチャーをアンインストールしないでください。元の Home を無効化する前に操作を確認してください。
+
+### GitHub にフォークを公開する
+
+1. [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) の **Fork** を作成し、自分のフォークをクローンします。
+2. このパッケージのファイルをコピーします。`.git` と元の `addons`、`docs`、`examples`、`tests`、`themes`、`tools`、`.github` は削除しません。
+3. `git status` で変更点を確認してから `git add -A`、`git commit -m "Add ROWA launcher customization"`、`git push origin main`（必要ならブランチ名を変更）を実行します。
+
+ROWA 版は旧バージョンを基にしているため、アップストリーム v3.1 の一部機能は再統合が必要です。Java／XML の静的検査は Gradle ビルドや実機テストの代わりにはなりません。元の著作権表示とライセンスは保持されています。
+
 <p align="center">
   <a href="https://cleanyour.tv"><img src="docs/banner.png" alt="CleanYourTV：テレビのホーム画面をすっきりと" width="800"></a>
 </p>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Alle apps beheren</string>
+    <string name="rowa_open_app_settings">App-instellingen openen</string>
+    <string name="rowa_usage_access_recent">Toegang tot gebruiksgegevens</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Bluetooth-instellingen niet beschikbaar; open Afstandsbedieningen en accessoires</string>
+</resources>

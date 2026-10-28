@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Upravljaj svim aplikacijama</string>
+    <string name="rowa_open_app_settings">Otvori podešavanja aplikacija</string>
+    <string name="rowa_usage_access_recent">Pristup podacima o korišćenju</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Bluetooth podešavanja nisu dostupna; otvorite Daljinski upravljači i dodaci</string>
+</resources>

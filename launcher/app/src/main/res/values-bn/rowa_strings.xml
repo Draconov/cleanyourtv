@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">সব অ্যাপ পরিচালনা করুন</string>
+    <string name="rowa_open_app_settings">অ্যাপ সেটিংস খুলুন</string>
+    <string name="rowa_usage_access_recent">ব্যবহারের তথ্য অ্যাক্সেস</string>
+    <string name="rowa_bt_name">ব্লুটুথ</string>
+    <string name="rowa_bt_unavailable">ব্লুটুথ সেটিংস খোলা যাচ্ছে না; রিমোট ও অ্যাক্সেসরিজ খুলুন</string>
+</resources>

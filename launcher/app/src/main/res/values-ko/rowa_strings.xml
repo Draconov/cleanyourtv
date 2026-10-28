@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">모든 앱 관리</string>
+    <string name="rowa_open_app_settings">앱 설정 열기</string>
+    <string name="rowa_usage_access_recent">사용 정보 접근</string>
+    <string name="rowa_bt_name">블루투스</string>
+    <string name="rowa_bt_unavailable">블루투스 설정을 열 수 없습니다. 리모컨 및 액세서리를 여세요</string>
+</resources>

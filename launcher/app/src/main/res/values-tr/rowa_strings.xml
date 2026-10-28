@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Tüm uygulamaları yönet</string>
+    <string name="rowa_open_app_settings">Uygulama ayarlarını aç</string>
+    <string name="rowa_usage_access_recent">Kullanım erişimi</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Bluetooth ayarları kullanılamıyor; Kumandalar ve Aksesuarlar bölümünü açın</string>
+</resources>

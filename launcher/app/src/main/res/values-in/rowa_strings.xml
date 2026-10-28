@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Kelola semua aplikasi</string>
+    <string name="rowa_open_app_settings">Buka setelan aplikasi</string>
+    <string name="rowa_usage_access_recent">Akses data penggunaan</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Setelan Bluetooth tidak tersedia; buka Remote dan Aksesori</string>
+</resources>

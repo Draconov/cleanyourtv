@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">管理所有应用</string>
+    <string name="rowa_open_app_settings">打开应用设置</string>
+    <string name="rowa_usage_access_recent">使用情况访问权限</string>
+    <string name="rowa_bt_name">蓝牙</string>
+    <string name="rowa_bt_unavailable">无法打开蓝牙设置；请在电视设置中打开遥控器和配件</string>
+</resources>

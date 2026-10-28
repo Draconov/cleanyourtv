@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">จัดการแอปทั้งหมด</string>
+    <string name="rowa_open_app_settings">เปิดการตั้งค่าแอป</string>
+    <string name="rowa_usage_access_recent">การเข้าถึงข้อมูลการใช้งาน</string>
+    <string name="rowa_bt_name">บลูทูธ</string>
+    <string name="rowa_bt_unavailable">ไม่สามารถเปิดการตั้งค่า Bluetooth ได้ โปรดเปิดรีโมตและอุปกรณ์เสริม</string>
+</resources>

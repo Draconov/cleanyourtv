@@ -95,9 +95,40 @@ import java.util.Set;
  * tvOS style home: black, a pinned dock row, an app grid, and one glass highlight that springs between tiles.
  */
 public class MainActivity extends Activity implements AppAdapter.TileListener {
-    @Override
-    protected void attachBaseContext(android.content.Context base) {
-        super.attachBaseContext(LauncherLocale.wrap(base));   // locale
+    // ROWA_HOME_REMAP_V2: local Home-only hardware scancode mapping; not global remapping.
+    // NO accessibility key filtering; volume, voice, navigation, Browser, power and Home pass through.
+    private boolean rowaHomeButton(android.view.KeyEvent event) {
+        android.view.InputDevice source = event.getDevice();
+        if (source == null || !"MStar Smart TV IR Receiver".equals(source.getName())) return false;
+        int scan = event.getScanCode();
+        // Log high vendor scancodes to diagnose mismatches between Linux EV_KEY and Android KeyEvent.
+        if (event.getAction() == android.view.KeyEvent.ACTION_DOWN && scan >= 400) {
+            android.util.Log.i("ROWA_HOME_REMAP", "scan=" + scan + " keyCode=" + event.getKeyCode());
+        }
+        String target;
+        switch (scan) {
+            case 566: target = "com.stremio.one"; break;          // Netflix
+            case 752: target = "rezkatv.web.app"; break;          // Prime Video
+            case 569: target = "org.smarttube.stable"; break;     // YouTube
+            case 456: target = "com.spotify.tv.android"; break;  // TCL Channel
+            case 485: target = "org.videolan.vlc"; break;         // Media Player
+            default: return false;
+        }
+        if (event.getAction() == android.view.KeyEvent.ACTION_UP && !event.isCanceled()) {
+            android.content.Intent launch = getPackageManager().getLeanbackLaunchIntentForPackage(target);
+            if (launch == null) launch = getPackageManager().getLaunchIntentForPackage(target);
+            if (launch != null) {
+                try {
+                    startActivity(launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+                    android.util.Log.i("ROWA_HOME_REMAP", "launched " + target + " scan=" + scan);
+                } catch (RuntimeException e) {
+                    android.util.Log.w("ROWA_HOME_REMAP", "Launch failed for " + target, e);
+                }
+            } else {
+                android.util.Log.w("ROWA_HOME_REMAP", "No launchable activity for " + target);
+            }
+        }
+        return true; // Consume ONLY these five buttons in this Activity.
     }
 
 
@@ -129,7 +160,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** The same opt-in menu is available from either hold-OK or the remote's Menu key. */
     private boolean tileMenuEnabled;
     private String inputAction;
-    private List<String> inputSources;
     private String inputUriScheme;
     private String sourcePanelService;
     private String sourcePanelAction;
@@ -190,31 +220,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean lunar;
     private int lunarOffset;
     private TextView stats;
+    // ROWA_WIDGETS_V1: opt-in weather, no extra service or application.
+    private TextView rowaWeather;
     private List<RaceWeekend.Race> raceCalendar;
     private View racePanel;
     private TextView raceKicker, raceHeadline, raceSessions;
-    /** game_day: each team's next game from an add-on, rotating in the race panel; null when the key is off. */
-    private GameDay gameDay;
-    private View raceBar;
-    private LinearLayout racePager;
-    private long rotationStart;
-    private long lastEndedRead;
-    private final Runnable turnTick = this::updatePanel;
     /** config.xml show_stats, overridable by a theme. Off: the line is gone and nothing is read. */
     private boolean showStats;
-    /** config.xml inputs_connected_only: the Inputs menu lists only connected inputs, the rest behind "More inputs". */
-    private boolean inputsConnectedOnly;
     private boolean shamsi;
     /** greeting_name: said after the greeting, which is shown in capitals. */
     private String greetingName = "";
     /** Optional time-of-day backdrop (config.xml, sky_intensity); 0 keeps it hidden. */
     private SkyView sky;
     private String vpnApp;
-    /** vpn_pill: the VPN shown as its own pill (btnVpn) instead of a badge in the network pill. Off with top_menu. */
-    private boolean vpnPill;
-    private TextView btnVpn;
-    /** The VpnBadge pill state btnVpn shows, so a refresh that changes nothing does not restyle it. */
-    private int vpnPillState = VpnBadge.PILL_HIDDEN;
     private SpringAnimation springX, springY;
     private float glassTargetX, glassTargetY;
     // How far the grid has scrolled the glass. springY works without it, in grid content space, so a
@@ -227,7 +245,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private final Rect tileRect = new Rect();
     private final Rect revealRect = new Rect();
     // Static so they survive the activity being destroyed while another app is open (low-memory TVs,
-    // or Developer options → "Don't keep activities"); they only reset when the process dies.
+    // or Developer options в†’ "Don't keep activities"); they only reset when the process dies.
     private static int lastFocused = 0;
     /** App of the last focused tile, so focus follows it when the app list changes. */
     private static String lastFocusedKey;
@@ -258,28 +276,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean bootToLiveTv;
     /** open_on_start_choice: the app picked in Launcher settings may open on the first Home of each boot. */
     private boolean openOnStartChoice;
-    /** open_on_start_network_wait, in ms; the boot's app while it waits for the network, and until when. */
-    private long openOnStartWaitMs;
-    private Intent startPending;
-    private long startDeadline;
-    private final Runnable openWhenOnline = new Runnable() {
-        @Override
-        public void run() {
-            if (startPending == null) return;
-            if (!OpenOnStart.opensNow(OpenOnStart.online(MainActivity.this), SystemClock.elapsedRealtime(),
-                    startDeadline)) {
-                handler.postDelayed(this, 500);
-                return;
-            }
-            Intent i = startPending;
-            startPending = null;
-            open(i);
-        }
-    };
     /** hidden_apps as the adapter sees them (config.xml or a theme's config.json): a hidden app gets no card either. */
     private Set<String> hiddenApps = Collections.emptySet();
-    /** library_excluded_apps: packages the App library catalogue never offers. */
-    private Set<String> libraryExcludedApps = Collections.emptySet();
     private List<Cards.Card> cards = Collections.emptyList();
     /** The grid has been laid out and focused since the last resume; the card prompt waits for this. */
     private boolean tilesReady;
@@ -291,11 +289,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean stopped;
     /** Between onStart and onStop: Home is (at least partly) on screen. */
     private boolean started;
-    /**
-     * Between onResume and onPause: Home is in front. The idle clock only runs then; a key's ACTION_UP can still
-     * reach Home after onPause, when that key opened another app, and must not start the clock over the app.
-     */
-    private boolean resumed;
     /** Rebuild the tiles on the way back to Home only when apps changed meanwhile (TileRefresh). */
     private final TileRefresh tileRefresh = new TileRefresh();
     /** PackageManager's change counter at the last rebuild, to catch a package broadcast that never arrived. */
@@ -354,6 +347,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (validated == lastValidated) return;
             lastValidated = validated;
             if (wifiNoInternetTint != null) handler.post(MainActivity.this::updateWifiLabel);
+            // Refresh only while this launcher actually owns the visible window.
+            // Do not depend on the upstream-only "resumed" field (absent from ROWA v14).
+            handler.post(() -> {
+                if (!isFinishing() && !isDestroyed() && hasWindowFocus()) {
+                    TextView weatherBadge = findViewById(R.id.rowaWeather);
+                    if (weatherBadge != null)
+                        RowaWeatherSettings.update(MainActivity.this, weatherBadge);
+                }
+            });
         }
     };
     /** Shows the Inputs pill once the TV registers an input: at boot HDMI inputs can appear after Home is shown. */
@@ -405,7 +407,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         @Override
         public void run() {
             updateGreeting();
-            updatePanel();
+            updateRace();
+            RowaWeather.update(MainActivity.this, rowaWeather);
             // The pill follows the network callbacks and each return to Home; only the diya's flame follows the
             // signal level, so only it needs this minute's binder calls (about 7 ms on the UI thread).
             if (festive) updateWifiLabel();
@@ -415,8 +418,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     };
 
-    private java.util.Map<Integer, String> homeAppKeys = java.util.Collections.emptyMap();
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -424,7 +425,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         density = getResources().getDisplayMetrics().density;
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
-        homeAppKeys = RemoteKeys.parseAppKeys(cfg.appKeys);
+        AppAdapter.ROWA_TILE_SCALE = RowaAppearance.scale(this, "cards");
         appLibrarySelection = cfg.appLibrarySelection;
         libraryOkOpens = cfg.libraryOkOpens;
         // restore_key_services: after a force stop, put back the remote's accessibility helpers that Android took
@@ -447,13 +448,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         idleClockMs = cfg.homeIdleClockMinutes * MINUTE_MS;
         bootToLiveTv = cfg.bootToLiveTv;
         openOnStartChoice = cfg.openOnStartChoice;
-        openOnStartWaitMs = cfg.openOnStartNetworkWait * 1000L;
         liveTvAction = cfg.liveTvAction;
         liveTvInputId = cfg.liveTvInputId;
         appLibraryEnabled = cfg.appLibrary;
         tileMenuEnabled = cfg.tileMenu;
         inputAction = cfg.inputAction;
-        inputSources = cfg.inputSources;
         inputUriScheme = cfg.inputUriScheme;
         sourcePanelService = cfg.sourcePanelService;
         sourcePanelAction = cfg.sourcePanelAction;
@@ -461,6 +460,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         coocaaSources = cfg.coocaaSources;
 
         root = findViewById(R.id.root);
+        RowaV15Perf.recordFirstFrame(root);
         root.setBackgroundColor(cfg.backgroundColor);
         // root fills the window with an opaque colour (Config keeps background_color opaque), so the window's own
         // black under it is a second full-screen fill on every frame for nothing. The starting window still uses
@@ -471,6 +471,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         sky.setIntensity(cfg.skyIntensity);
         glass = findViewById(R.id.glass);
         glass.setStyle(cfg.glassStyle);
+        glass.setSurfaceOpacity(RowaVisualOptions.panelOpacity(this));
         if (festive) glass.setAccent(festival.accentColor());
         ambient = findViewById(R.id.ambient);
         // The glow is one bitmap, so its alpha can be applied while drawing it. Otherwise every frame of
@@ -524,18 +525,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
         stats = findViewById(R.id.stats);
+        rowaWeather = findViewById(R.id.rowaWeather);
         raceCalendar = cfg.raceCalendar;
         racePanel = findViewById(R.id.racePanel);
         raceKicker = findViewById(R.id.raceKicker);
         raceHeadline = findViewById(R.id.raceHeadline);
         raceSessions = findViewById(R.id.raceSessions);
-        raceBar = findViewById(R.id.raceBar);
-        racePager = findViewById(R.id.racePager);
-        gameDay = GameDay.create(this, cfg.gameDay, handler, this::updatePanel);
-        // The rotation runs on the clock that never jumps: setting the TV's time must not stall or stretch a turn.
-        rotationStart = SystemClock.elapsedRealtime();
         showStats = cfg.showStats;
-        inputsConnectedOnly = cfg.inputsConnectedOnly;
         shamsi = cfg.shamsiDate;
         lunarDate = findViewById(R.id.lunarDate);
         lunar = cfg.lunarDate;
@@ -551,11 +547,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             date.setPadding(0, (int) (4 * density), 0, 0);
         }
         vpnApp = cfg.vpnApp;
-        vpnPill = cfg.vpnPill && !cfg.topMenu;
-        btnVpn = findViewById(R.id.btnVpn);
         moduleCards = cfg.moduleCards;
         hiddenApps = new HashSet<>(cfg.hiddenApps);
-        libraryExcludedApps = new HashSet<>(cfg.libraryExcludedApps);
 
         grid = findViewById(R.id.grid);
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
@@ -710,22 +703,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
 
-        // game_day: the panel above the dock rides up with the cards instead of being covered by them, and fades
-        // out by the time it reaches the clock. The grid's own offset is read, so a jump (Home, a restored focus)
-        // lands right too.
-        if (gameDay != null) {
-            View clockBlock = findViewById(R.id.leftBlock);
-            grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
-                @Override
-                public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
-                    int shift = rv.canScrollVertically(-1) ? rv.computeVerticalScrollOffset() : 0;
-                    racePanel.setTranslationY(-shift);
-                    int room = Math.max(1, racePanel.getTop() - clockBlock.getBottom());
-                    racePanel.setAlpha(Math.max(0f, 1f - shift / (float) room));
-                }
-            });
-        }
-
         // Liquid feel: soft springs on the highlight's position.
         springX = new SpringAnimation(glass, new FloatPropertyCompat<View>("glassContentX") {
             @Override
@@ -765,7 +742,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> showInputs());
         btnWifi.setOnClickListener(v -> openNetworkPill());
-        btnVpn.setOnClickListener(v -> openVpnPill());
         btnWifi.setOnLongClickListener(v -> {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
             return true;
@@ -792,7 +768,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             libraryFromTopBar = true;   // closing it goes back to this button, not to the pill after the last row
         });
         btnLibraryTop.setVisibility(cfg.libraryButton && cfg.appLibrary ? View.VISIBLE : View.GONE);
-        addTopBarApps(cfg.topBarApps, cfg.launchActions);
+        addTopBarApps(cfg.topBarApps);
         iconOnlyButtons = cfg.iconOnlyButtons;
         topMenu = cfg.topMenu;
         wifiIconOnly = iconOnlyButtons && cfg.wifiLabelWidth <= 0;
@@ -832,6 +808,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             showSettingsMenu();
             return true;
         });
+        rowaSetupHeader();
+        RowaAppearance.applyHeader(this);
 
         // Keep focus on the top bar at its ends and at the top: Android's focus finder would otherwise
         // jump to a tile far below when there is nothing in that direction.
@@ -852,13 +830,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         };
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
-        btnVpn.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
         btnReorder.setOnKeyListener(pillKeys);
         btnLibraryTop.setOnKeyListener(pillKeys);
         for (View button : topAppButtons) button.setOnKeyListener(pillKeys);
         if (advancedEffects) {
-            List<View> pills = new ArrayList<>(Arrays.asList(btnInputs, btnWifi, btnVpn, btnReorder, btnLibraryTop, btnSettings));
+            List<View> pills = new ArrayList<>(Arrays.asList(btnInputs, btnWifi, btnReorder, btnLibraryTop, btnSettings));
             pills.addAll(topAppButtons);
             for (View button : pills) {
                 button.setOnFocusChangeListener((view, focused) -> view.animate()
@@ -927,13 +904,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View anchor = topMenu ? findViewById(R.id.btnSettings) : btnInputs;
         if (anchor.getVisibility() != View.VISIBLE) return true;
         if (anchor.isLaidOut()) {
-            // Android 9 delivers a new intent to a paused activity with a brief resume and pause around it, and
-            // onPause() closes popups, so open the menu once that has run (HiSmartTV A4, Android TV 9).
-            anchor.post(() -> {
-                if (isFinishing() || anchor.getVisibility() != View.VISIBLE) return;
-                anchor.requestFocus();
-                showInputs();
-            });
+            anchor.requestFocus();
+            showInputs();
             return true;
         }
         // Cold start: the popup anchors to the pill (or the gear), so wait for the first layout.
@@ -969,7 +941,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (openLauncherSettingsIfAsked(intent)) return;
         if (openInputsIfAsked(intent)) return;
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
-        if (gameDay != null && !stopped) gameDay.read();
+        wallpaperPlayer.onHomePressed();
         grid.scrollToPosition(0);
         lastFocused = 0;
         lastFocusedKey = adapter.getItemCount() > 0 ? adapter.keyAt(0) : null;
@@ -999,7 +971,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onResume() {
         super.onResume();
-        resumed = true;
         // A festival that started or ended while Home was in the background: rebuild with or without it.
         if (festive != festival.active(LocalDate.now())) {
             recreate();
@@ -1030,7 +1001,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         if (openLiveTvAfterBoot()) return;
         updateGreeting();
-        updatePanel();
+        updateRace();
         // The network and Inputs pills keep their state while Home is in the background, and callbacks update them
         // when the network or the inputs change, so this refresh only catches anything missed. Its binder calls
         // (about 7 ms on a TCL C755, most of it WifiManager.getConnectionInfo) would hold up the first frame back
@@ -1043,7 +1014,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             pillsShown = true;
         }
         if (showStats) startStats();
-        if (gameDay != null) gameDay.start();
+        // ROWA_APPEARANCE_V6: layout changes rebuild Home, then resume this exact menu row.
+        String restoreRowaMenu = rowaAppearanceReopenKey;
+        if (restoreRowaMenu != null) {
+            rowaAppearanceReopenKey = null;
+            root.postDelayed(() -> {
+                if (!isFinishing() && !isDestroyed()) rowaShowAppearanceMenu(restoreRowaMenu);
+            }, 130);
+        }
+        RowaWeather.update(this, rowaWeather);
         sky.update();
         wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
@@ -1069,6 +1048,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == ROWA_V15_WALLPAPER_PICK) {
+            if (resultCode == RESULT_OK && data != null)
+                RowaVisualOptions.replaceSelection(this, data, imported -> {
+                    Toast.makeText(this, imported > 0 ?
+                            getString(R.string.rowa_v15_wallpaper_success, imported) :
+                            getString(R.string.rowa_v15_wallpaper_error), Toast.LENGTH_LONG).show();
+                    if (imported > 0) recreate();
+                });
+            return;
+        }
         if (requestCode == LAUNCHER_SETTINGS_REQUEST && resultCode == RESULT_OK
                 && data != null && data.getBooleanExtra(LauncherSettingsActivity.EXTRA_REORDER, false)) {
             getIntent().putExtra(LauncherSettingsActivity.EXTRA_REORDER, true);
@@ -1206,13 +1195,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private void restartIdleClock() {
         root.removeCallbacks(showIdleClock);
-        if (resumed && idleClockMs > 0) root.postDelayed(showIdleClock, idleClockMs);
+        if (idleClockMs > 0) root.postDelayed(showIdleClock, idleClockMs);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        resumed = false;
         root.removeCallbacks(showIdleClock);
         endReorder();   // Home or another app while reordering keeps the order so far
         wallpaperPlayer.stop();
@@ -1221,11 +1209,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient.animate().cancel();
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
-        handler.removeCallbacks(openWhenOnline);
-        startPending = null;   // leaving Home before the network came back: the boot's app stays closed
         stopStats();
-        if (gameDay != null) gameDay.stop();
-        handler.removeCallbacks(turnTick);
         if (diya != null) diya.stop();
         cancelPendingFocusScroll();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
@@ -1279,7 +1263,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (gameDay != null) gameDay.shutdown();
         unregisterReceiver(packageReceiver);
         wallpaperPlayer.close();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
@@ -1323,8 +1306,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        // Vendor keys (TCL Netflix button, 4062) never reach the key services, only the focused window.
-        if (event.getKeyCode() >= 1000 && RemoteKeys.handle(this, event, homeAppKeys.get(event.getKeyCode()), null)) return true;
+        if (rowaHomeButton(event)) return true;
         if (handleSettingsKey(event)) return true;
         if (tileMenuEnabled && !reordering && openPopup == null && cardPrompt == null
                 && event.getKeyCode() == KeyEvent.KEYCODE_MENU) {
@@ -1652,6 +1634,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public void onBackPressed() {
+        // ROWA_V13: fallback when a vendor redirects Back to the Activity.
+        if (openPopup != null && openPopup.isShowing()) {
+            openPopup.dismiss();
+            return;
+        }
         // Home screen: Back goes nowhere.
     }
 
@@ -1663,7 +1650,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (openPopup != null) openPopup.dismiss();
         libraryFocusPending = false;
         libraryFromTopBar = false;
-        libraryFromVpnPill = false;
         appLibrary = new AppLibraryDialog(this, animations, reducedMotion, appLibrarySelection, libraryOkOpens, adapter::containsPackage, () -> reloadApps(false), () -> {
             appLibrary = null;
             openPopup = null;
@@ -1672,18 +1658,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 btnLibraryTop.requestFocus();
                 return;
             }
-            boolean fromVpnPill = libraryFromVpnPill;
-            libraryFromVpnPill = false;
-            // The VPN pill can hide while the library is open (its VPN dropped): then focus goes as from the grid.
-            if (fromVpnPill && btnVpn.getVisibility() == View.VISIBLE) {
-                btnVpn.requestFocus();
-                return;
-            }
             libraryFocusPending = true;
             grid.post(() -> {
                 if (libraryFocusPending && appLibrary == null && hasWindowFocus() && !isFinishing()) focusLibrary();
             });
-        }, libraryExcludedApps);
+        });
         openPopup = appLibrary.popup;
         appLibrary.show();
     }
@@ -1844,12 +1823,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         } else {
             hero.setY(y);
-            // onPause cancels the fade-ins, and a second Home during one lands on the same tile, which starts none:
-            // finish them, or the shelf and the glow stay dim until focus moves to another app.
-            if (hero.getAlpha() < 1f) hero.animate().alpha(1f).setDuration(260).start();
-            if (ambientGlow && color == ambientColor && ambient.getAlpha() < 1f) {
-                ambient.animate().alpha(1f).setDuration(600).start();
-            }
         }
     }
 
@@ -1986,7 +1959,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /**
      * The glow used to be a full-screen radial GradientDrawable. On Android 10 that drawable is
-     * drawn on the CPU, so fading it for half a second redrew 1920×1080 every frame and the
+     * drawn on the CPU, so fading it for half a second redrew 1920Г—1080 every frame and the
      * highlight looked like it was running at a few frames per second. A small bitmap stretched
      * over the screen is one texture. It is painted once in white and tinted with the app's colour,
      * so changing apps neither repaints it on the CPU (about 11 ms) nor uploads it again.
@@ -2142,7 +2115,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 if (statsBg != bg) return;
                 String line = readStatsLine();
                 handler.post(() -> {
-                    if (showStats && stats != null && statsBg == bg) stats.setText(line);
+                    if (showStats && stats != null && statsBg == bg) stats.setText(rowaColorCpuTemperature(line));
                 });
                 if (statsBg == bg) bg.postDelayed(this, STATS_MS);
             }
@@ -2160,31 +2133,44 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!showStats) stats.setVisibility(View.GONE);
     }
 
-    /** One quiet line, e.g. "CPU 8%  ·  Memory 430 MB free  ·  Storage 3.1 GB free". Runs off the main thread. */
+    /** One quiet line, e.g. "CPU 8%  В·  Memory 430 MB free  В·  Storage 3.1 GB free". Runs off the main thread. */
     private static void appendStat(StringBuilder line, String part) {
-        if (line.length() > 0) line.append("  ·  ");
+        if (line.length() > 0) line.append("  В·  ");
         line.append(part);
     }
 
-    private String readStatsLine() {
-        int cpu = cpuPercent();
-        if (cpu < 0) {
-            try {
-                Thread.sleep(200);             // second sample, so the first line already has a CPU figure
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return "";
-            }
-            cpu = cpuPercent();
+    // ROWA_APPEARANCE_V6: CPU temperature, not CPU usage. Only the numeric temperature goes red.
+    private CharSequence rowaColorCpuTemperature(String line) {
+        int start = line.indexOf("CPU ");
+        int end = line.indexOf(" | RAM ");
+        if (start < 0 || end < 0) return line;
+        String value = line.substring(start + 4, end);
+        if (!value.endsWith("\u00b0C")) return line;
+        try {
+            int degrees = Integer.parseInt(value.substring(0, value.length() - 2));
+            if (!RowaCpuThermal.isHot(degrees)) return line;
+            android.text.SpannableString result = new android.text.SpannableString(line);
+            result.setSpan(new android.text.style.ForegroundColorSpan(0xFFFF4D59),
+                    start + 4, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            return result;
+        } catch (NumberFormatException ignored) {
+            return line;
         }
-        // Android 8 and later hide /proc/stat from apps on many TVs: then the line leaves CPU out rather than
-        // showing a dash that never fills in.
-        StringBuilder line = new StringBuilder();
-        if (cpu >= 0) line.append(getString(R.string.stats_cpu, cpu));
+    }
+
+    /** This is called on the existing 10-second background stats thread, not on the UI thread. */
+    private String readStatsLine() {
+        StringBuilder line = new StringBuilder("CPU ");
+        int temperature = RowaCpuThermal.readCelsius();
+        if (temperature >= 0) line.append(temperature).append("\u00b0C");
+        else line.append("--"); // The OS hid the CPU sensor; do not guess.
+        line.append(" | RAM ");
         long[] mem = memUsedOfTotalMb();
-        if (mem != null) appendStat(line, getString(R.string.stats_memory, mem[0], mem[1]));
-        String free = formatGb(getResources(), Environment.getDataDirectory().getFreeSpace());
-        if (!free.isEmpty()) appendStat(line, getString(R.string.stats_storage, free));
+        if (mem == null || mem[1] <= 0) line.append("--");
+        else {
+            int percent = (int) Math.round(mem[0] * 100.0 / mem[1]);
+            line.append(Math.max(0, Math.min(100, percent))).append('%');
+        }
         return StatsText.forLocale(line.toString(), getResources().getConfiguration().getLocales().get(0));
     }
 
@@ -2382,17 +2368,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             ((LinearLayout.LayoutParams) clockRow.getLayoutParams()).gravity = Gravity.RIGHT;
         }
         clockColumn.addView(column, clockColumn.indexOfChild(clockRow) + 1, lp);
-        // The column now wraps its texts, so they must wrap too: a match_parent TextView does not ask for a new
-        // layout when its text gets longer, and the column kept the width of the day before ("TUESDAY 27 OCTOB…").
-        ViewGroup texts = (ViewGroup) column;
-        for (int i = 0; i < texts.getChildCount(); i++) {
-            View text = texts.getChildAt(i);
-            LinearLayout.LayoutParams textLp = (LinearLayout.LayoutParams) text.getLayoutParams();
-            textLp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
-            // Keep each line where its own gravity put it (right in Hebrew) now that it no longer fills the column.
-            textLp.gravity = ((TextView) text).getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK;
-            text.setLayoutParams(textLp);
-        }
     }
 
     /** The first top-bar button after Inputs that is shown, in bar order (top_bar_apps, the network pill, ...); Settings is always there. */
@@ -2412,7 +2387,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * Puts each top_bar_apps app in the top bar as a round pill with the app's own logo, left of the network pill.
      * The logo keeps its colours: the pill style's tint, which turns the other icons white, is cleared.
      */
-    private void addTopBarApps(List<String> packages, Map<String, String> launchActions) {
+    private void addTopBarApps(List<String> packages) {
         ViewGroup bar = findViewById(R.id.topButtons);
         PackageManager pm = getPackageManager();
         int size = Math.round(22 * density);
@@ -2420,17 +2395,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             Intent launch = pm.getLeanbackLaunchIntentForPackage(pkg);
             if (launch == null) launch = pm.getLaunchIntentForPackage(pkg);
             if (launch == null) continue;   // not installed, or disabled
-            // Use the same configured launch_actions as tiles; retain the normal entry if unavailable.
-            launch = LaunchActions.select(pkg, launchActions, launch, (targetPackage, action) -> {
-                Intent custom = LaunchActions.intent(targetPackage, action);
-                return pm.resolveActivity(custom, 0) != null ? custom : null;
-            });
             Drawable logo;
             CharSequence label;
             try {
                 ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
                 logo = info.loadIcon(pm);
                 label = info.loadLabel(pm);
+                AppAppearance.Artwork visual = AppAppearance.artwork(this, pkg);
+                if (visual != null) logo = visual.drawable;
+                label = AppAppearance.label(this, pkg, label.toString());
             } catch (PackageManager.NameNotFoundException e) {
                 continue;
             }
@@ -2443,8 +2416,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             button.setContentDescription(label);
             Intent target = launch;
             button.setOnClickListener(v -> open(new Intent(target)));
-            // After the network pill and the VPN pill; the Hebrew bar runs the other way, so before both there.
-            bar.addView(button, bar.indexOfChild(getResources().getBoolean(R.bool.rtl_menu_bar) ? btnVpn : btnWifi));
+            bar.addView(button, bar.indexOfChild(btnWifi));
             topAppButtons.add(button);
         }
     }
@@ -2565,8 +2537,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Locale-specific day parts (app language on Android 13+).
         // Indonesian: Pagi 00-10, Siang 10-15, Sore 15-18, Malam 18-24.
         // Spain (es-ES) and Catalan: "Buenas tardes" into the evening; "Buenas noches" from 21.
-        // Latin American Spanish (es-MX, es-AR, …) keeps the default hours: evening strings are also
-        // «Buenas noches», and there «Buenas noches» from ~17 matches local use better than Spain's 21.
+        // Latin American Spanish (es-MX, es-AR, вЂ¦) keeps the default hours: evening strings are also
+        // В«Buenas nochesВ», and there В«Buenas nochesВ» from ~17 matches local use better than Spain's 21.
         Locale locale = getResources().getConfiguration().getLocales().get(0);
         String lang = locale.getLanguage();
         String country = locale.getCountry();
@@ -2600,8 +2572,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             greeting.setText(festiveGreeting);
             greeting.setTextColor(liftTowardsWhite(festival.accentColor(), 0.25f));
         } else {
-            greeting.setText(greetingName.isEmpty() ? getString(res)
-                    : getString(R.string.greeting_with_name, getString(res), greetingName));
+            greeting.setText(RowaPersonalization.name(this, greetingName).isEmpty() ? getString(res)
+                    : getString(R.string.greeting_with_name, getString(res), RowaPersonalization.name(this, greetingName)));
             greeting.setTextColor(greetingColor);
         }
         if (shamsi) shamsiDate.setText(Shamsi.today(getResources()));
@@ -2616,88 +2588,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * Shows or hides the race-weekend panel for this minute. Text only, set once a minute with the clock:
      * nothing animates, so the panel costs the GPU nothing between ticks.
      */
-    /**
-     * The race panel's place under the clock. With game_day off it is exactly the F1 panel (updateRace). With it on,
-     * each team's next game takes a turn there, and the theme's F1 weekend is one more turn drawn as today.
-     */
-    private void updatePanel() {
-        if (gameDay == null) {
-            updateRace();
-            return;
-        }
-        handler.removeCallbacks(turnTick);
-        long now = System.currentTimeMillis();
-        List<GameDay.Turn> games = gameDay.turns();
-        for (GameDay.Turn g : games) {
-            if (g.endMs <= now && now - lastEndedRead > MINUTE_MS) {
-                // A game is over: the add-on already has that team's next one.
-                lastEndedRead = now;
-                gameDay.read();
-                break;
-            }
-        }
-        RaceWeekend.State f1 = raceCalendar.isEmpty() ? null : RaceWeekend.at(raceCalendar, java.time.Instant.ofEpochMilli(now));
-        List<GameDay.Turn> turns = GameDay.merge(games, f1, now);
-        if (turns.isEmpty()) {
-            racePanel.setVisibility(View.GONE);
-            return;
-        }
-        int seconds = gameDay.turnSeconds();
-        long since = SystemClock.elapsedRealtime() - rotationStart;
-        int on = GameDay.current(turns.size(), since, seconds);
-        GameDay.Turn t = turns.get(on);
-        if (t.f1) {
-            raceBar.setBackgroundResource(R.drawable.race_bar);
-            raceSessions.setVisibility(View.VISIBLE);
-            updateRace();
-        } else {
-            GradientDrawable bar = new GradientDrawable();
-            bar.setCornerRadius(1.5f * density);
-            bar.setColor(t.colour);
-            raceBar.setBackground(bar);
-            raceKicker.setText(t.topLine);
-            if (GameDay.live(t, now)) {
-                SpannableString live = new SpannableString("\u25CF  " + getString(R.string.game_live));
-                live.setSpan(new ForegroundColorSpan(RACE_RED), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                raceHeadline.setText(live);
-            } else {
-                String in = RaceWeekend.countdown(getResources(), GameDay.until(t, now));
-                raceHeadline.setText(t.word.isEmpty() ? in : getString(R.string.race_next, t.word, in));
-            }
-            // No session times for a game: the line takes no room, so the dots sit under the countdown.
-            raceSessions.setVisibility(View.GONE);
-            racePanel.setVisibility(View.VISIBLE);
-        }
-        showPager(turns.size(), on);
-        if (turns.size() > 1 && !stopped) handler.postDelayed(turnTick, GameDay.delayToNextTurn(since, seconds));
-    }
-
-    /** One dot per turn, the one on screen bright; none for a single turn. */
-    private void showPager(int count, int on) {
-        if (count < 2) {
-            racePager.setVisibility(View.GONE);
-            return;
-        }
-        if (racePager.getChildCount() != count) {
-            racePager.removeAllViews();
-            int size = Math.round(5 * density);
-            for (int k = 0; k < count; k++) {
-                View dot = new View(this);
-                GradientDrawable d = new GradientDrawable();
-                d.setShape(GradientDrawable.OVAL);
-                d.setColor(0xFFFFFFFF);
-                dot.setBackground(d);
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
-                lp.setMarginEnd(size);
-                racePager.addView(dot, lp);
-            }
-        }
-        for (int k = 0; k < count; k++) racePager.getChildAt(k).setAlpha(k == on ? 0.9f : 0.3f);
-        racePager.setVisibility(View.VISIBLE);
-    }
-
-    private void updateRace() {        // an empty calendar (a theme without race_calendar, or a reset) hides a panel the last theme showed
-        RaceWeekend.State s = raceCalendar.isEmpty() ? null : RaceWeekend.at(raceCalendar, java.time.Instant.now());
+    private void updateRace() {
+        if (raceCalendar.isEmpty()) return;
+        RaceWeekend.State s = RaceWeekend.at(raceCalendar, java.time.Instant.now());
         if (s == null) {
             racePanel.setVisibility(View.GONE);
             return;
@@ -2808,8 +2701,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         // With a VPN app configured, a VPN that is down matters too: show a red "VPN off" capsule then.
         boolean vpnDown = !vpn && online && !vpnApp.isEmpty();
-        if (vpnPill) updateVpnPill(vpn);
-        if ((vpn || vpnDown) && !vpnPill) {
+        if (vpn || vpnDown) {
             // Network name, then the green lock-and-VPN (or red "VPN off") capsule drawn in place of the word.
             String badge = getString(vpn ? R.string.vpn : R.string.vpn_off);
             VpnBadge span = new VpnBadge(vpn ? getDrawable(R.drawable.ic_lock) : null, density);
@@ -2824,9 +2716,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             float room = btnWifi.getMaxWidth() - btnWifi.getPaddingStart() - btnWifi.getPaddingEnd() - iconRoom
                     - span.getSize(paint, badge, 0, badge.length(), null) - paint.measureText(" ") - 2 * density;
             String name = TextUtils.ellipsize(text, paint, Math.max(0, room), TextUtils.TruncateAt.END).toString();
-            // A long badge ("VPN отключён") can leave room for a stub like "MT…", which says nothing and, after
+            // A long badge ("VPN РѕС‚РєР»СЋС‡С‘РЅ") can leave room for a stub like "MTвЂ¦", which says nothing and, after
             // rounding, can push the badge itself out of the pill. Show the badge alone then. On Ethernet the
-            // icon already names the link, and "Ethernet" cut to "Ethe…" or not depended on the font size (#961),
+            // icon already names the link, and "Ethernet" cut to "EtheвЂ¦" or not depended on the font size (#961),
             // so Ethernet always shows the icon and the badge alone.
             // The space stays even then: a line holding only the span gets no font metrics and collapses.
             boolean stub = name.length() < text.length() && name.length() < 5;
@@ -2857,6 +2749,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 btnWifi.setCompoundDrawableTintList(tint);
             }
         }
+        rowaApplyNetworkPreference();
     }
 
     /** config.xml icon_only_buttons. */
@@ -2876,8 +2769,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private View btnLibraryTop;
     /** The open library came from that button: closing it returns there instead of scrolling to the grid's end. */
     private boolean libraryFromTopBar;
-    /** The open library came from the VPN pill (vpn_pill, no VPN app): closing it returns there while the pill still shows. */
-    private boolean libraryFromVpnPill;
 
     /** Turns a labelled top pill into the round TopButtonIcon shape: no text, the icon centred by even padding. */
     private void makeIconOnly(TextView pill) {
@@ -2941,61 +2832,339 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
-    /**
-     * The network pill opens the VPN app when one is configured and installed, otherwise Wi-Fi settings. With
-     * vpn_pill the VPN app has its own pill, so this one always opens Wi-Fi settings.
+    /** The network pill opens the VPN app when one is configured and installed, otherwise Wi-Fi settings. */
+    // ROWA_HEADER_V2: TV-only header controls. No background service and no accessibility key filter.
+    private static final String ROWA_HEADER_PREFS = "rowa_header_preferences";
+
+    /** Assemble the same controls in a single header row, not a new launcher. */
+    private void rowaSetupHeader() {
+        rowaPositionWeatherAfterDate();
+
+        if (stats != null && showStats) {
+            android.view.ViewGroup old = (android.view.ViewGroup) stats.getParent();
+            if (old != null) old.removeView(stats);
+            LinearLayout bar = findViewById(R.id.topButtons);
+            int settingsIndex = bar.indexOfChild(findViewById(R.id.btnSettings));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, Math.round(42 * density));
+            lp.setMargins(Math.round(10 * density), 0, 0, 0);
+            bar.addView(stats, Math.max(0, settingsIndex), lp);
+            stats.setGravity(Gravity.CENTER);
+            stats.setTextSize(14);
+            rowaStyleStatsPill();
+            stats.setSingleLine(true);
+            stats.setFocusable(true);
+            stats.setClickable(true);
+            stats.setContentDescription("CPU and RAM. Hold OK for recently used apps.");
+            stats.setOnClickListener(v -> rowaShowAppsMenu());
+            stats.setOnLongClickListener(v -> { rowaShowAppsMenu(); return true; });
+            // The existing stats reader still runs only while Home is resumed, every ten seconds.
+        }
+
+        btnWifi.setOnClickListener(v -> rowaOpenPreferredNetwork());
+        btnWifi.setOnLongClickListener(v -> { rowaShowNetworkMenu(); return true; });
+        rowaApplyNetworkPreference();
+    }
+
+    /** Change which settings page an ordinary OK press opens. Persist over reboots. */
+    private boolean rowaBluetoothPreferred() {
+        return getSharedPreferences(ROWA_HEADER_PREFS, MODE_PRIVATE)
+                .getBoolean("bluetooth_default", false);
+    }
+
+    private void rowaChooseNetwork(boolean bluetooth) {
+        getSharedPreferences(ROWA_HEADER_PREFS, MODE_PRIVATE).edit()
+                .putBoolean("bluetooth_default", bluetooth).apply();
+        wifiIcon = -1; // Make sure the original Wi-Fi drawable is restored after Bluetooth.
+        updateWifiLabel();
+    }
+
+    // ROWA_HEADER_V5: TV-aware settings launch. Do not depend on SystemSettings vendor fallback.
+    // Many Google TV firmware builds do not expose ACTION_BLUETOOTH_SETTINGS.
+    // ROWA_UI_V7: prefer the TV's accessories page or pairing activity to generic Settings.
+    // An OEM may not export the connected-devices page. Never claim it opened a page
+    // we cannot resolve, and never change Bluetooth's state ourselves.
+    /** ROWA_UI_V8: Google TV's actual connected-devices settings slice first.
+     * ACTION_BLUETOOTH_SETTINGS on this ROWA resolves to generic Settings, so it
+     * is intentionally NOT used as the first fallback. Firmware support varies.
      */
+    /** ROWA_V10: Prefer the provider actually present in Android TV Settings,
+     * not the unrelated btservices provider. The ROWA firmware may still ignore
+     * the slice intent; no synthetic navigation or accessibility key injection. */
+    // ROWA_V11: This firmware exports Settings, not a confirmed direct accessories Activity.
+    // Instead of failing with a toast, give two useful native routes.
+    // ROWA_V12: native pairing first, native accessory page second; never mislabel Settings root.
+    // ROWA_V14: let the PopupWindow release focus before starting TV Settings.
+    // Both mouse/touch clicks and remote OK go through addSettingsMenuRow().
+    private void rowaOpenBluetoothSettings() {
+        View anchor = findViewById(R.id.btnWifi);
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        PopupWindow popup = glassPopup(panel, Math.round(245 * density));
+        addSettingsMenuRow(rows, popup, R.string.rowa_v12_bt_pair,
+                () -> rowaRunBluetoothMenuAction("pair", this::rowaStartBluetoothPairing));
+        addSettingsMenuRow(rows, popup, R.string.rowa_v12_bt_accessories,
+                () -> rowaRunBluetoothMenuAction("accessories", this::rowaOpenTvAccessories));
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setWidth(Math.max(Math.round(245 * density), panel.getMeasuredWidth()));
+        dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
+                ? Gravity.START : Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    // Called after the existing helper has dismissed its PopupWindow.
+    private void rowaRunBluetoothMenuAction(String label, Runnable action) {
+        android.util.Log.i("ROWA_BT_V14", "Bluetooth dropdown selected: " + label);
+        root.postDelayed(() -> {
+            android.util.Log.i("ROWA_BT_V14", "Running Bluetooth menu action: " + label);
+            try {
+                action.run();
+            } catch (RuntimeException failure) {
+                android.util.Log.e("ROWA_BT_V14", "Uncaught Bluetooth menu action: " + label, failure);
+                Toast.makeText(this, "Cannot open TV Bluetooth settings; see ROWA_BT_V14 log",
+                        Toast.LENGTH_LONG).show();
+            }
+        }, 150);
+    }
+
+    // ROWA_V13: direct Android TV Settings slice, based on installed provider
+    // com.android.tv.settings.accessories.sliceprovider. No misleading Settings-root fallback.
+    // ROWA_V14: same intent proven by ADB v13 -a/-p/--es invocation.
+    // This may still be blocked for third-party launchers by OEM permissions.
+    private void rowaOpenTvAccessories() {
+        final String uri = "content://com.android.tv.settings.accessories.sliceprovider/general";
+        final String action = "android.settings.SLICE_SETTINGS";
+        final Intent implicit = new Intent(action)
+                .setPackage("com.android.tv.settings")
+                .putExtra("slice_uri", uri);
+        try {
+            android.util.Log.i("ROWA_BT_V14", "Launching implicit Settings slice");
+            startActivity(implicit);
+            android.util.Log.i("ROWA_BT_V14", "Implicit Settings startActivity returned normally");
+            return;
+        } catch (ActivityNotFoundException | SecurityException denied) {
+            android.util.Log.e("ROWA_BT_V14", "Implicit Settings slice rejected", denied);
+        }
+        final Intent explicit = new Intent(action)
+                .setClassName("com.android.tv.settings", "com.android.tv.settings.slice.SliceActivity")
+                .putExtra("slice_uri", uri);
+        try {
+            android.util.Log.i("ROWA_BT_V14", "Launching explicit Settings slice");
+            startActivity(explicit);
+            android.util.Log.i("ROWA_BT_V14", "Explicit Settings startActivity returned normally");
+            return;
+        } catch (ActivityNotFoundException | SecurityException denied) {
+            android.util.Log.e("ROWA_BT_V14", "Explicit Settings slice rejected", denied);
+        }
+        Toast.makeText(this, R.string.rowa_v12_accessories_unavailable, Toast.LENGTH_LONG).show();
+    }
+
+    private void rowaOpenTvSettings() {
+        rowaOpenTvAccessories();
+    }
+
+    private void rowaOpenPreferredNetwork() {
+        if (rowaBluetoothPreferred()) {
+            rowaOpenBluetoothSettings();
+        } else {
+            openNetworkPill();
+        }
+    }
+
+    /** Invoked after the original WifiManager/status logic so live Wi-Fi updates don't reset the choice. */
+    private void rowaApplyNetworkPreference() {
+        if (btnWifi == null || !rowaBluetoothPreferred()) return;
+        btnWifi.setText(wifiIconOnly ? null : "Bluetooth");
+        btnWifi.setContentDescription("Bluetooth settings. Hold OK to select Wi-Fi instead.");
+        btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                R.drawable.rowa_ic_bluetooth, 0, 0, 0);
+    }
+
+    // ROWA_HEADER_STYLE_V3: reuse the exact row drawable, focus behavior and fonts of Settings.
+    private void rowaStyleStatsPill() {
+        if (stats == null) return;
+        stats.setBackgroundResource(R.drawable.pill_bg);
+        stats.setTextColor(getResources().getColorStateList(R.drawable.pill_text, getTheme()));
+        stats.setPadding(Math.round(16 * density), 0, Math.round(20 * density), 0);
+        stats.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f);
+        stats.setLetterSpacing(0.01f);
+        stats.setGravity(Gravity.CENTER);
+        stats.setSingleLine(true);
+    }
+
+    /** Mirrors CleanYourTV's own addSettingsMenuRow, but accepts a dynamic string label. */
+    private View rowaAddSettingsStyleRow(LinearLayout rows, PopupWindow popup,
+                                          String title, Runnable action) {
+        View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        row.findViewById(R.id.icon).setVisibility(View.GONE);
+        row.findViewById(R.id.dot).setVisibility(View.GONE);
+        row.findViewById(R.id.status).setVisibility(View.GONE);
+        ((TextView) row.findViewById(R.id.title)).setText(title);
+        row.setOnClickListener(v -> {
+            popup.dismiss();
+            action.run();
+        });
+        // Match Settings: ignore the OK-release that follows the hold which opened this menu.
+        final boolean[] pressed = {false};
+        row.setOnKeyListener((v, code, event) -> {
+            if (code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER) return false;
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) pressed[0] = true;
+                return true;
+            }
+            boolean activate = pressed[0];
+            pressed[0] = false;
+            if (activate) {
+                popup.dismiss();
+                action.run();
+            }
+            return true;
+        });
+        RowaMenuMarquee.bind(row, (TextView) row.findViewById(R.id.title));
+        rows.addView(row);
+        return row;
+    }
+
+    private void rowaShowNetworkMenu() {
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        PopupWindow popup = glassPopup(panel, Math.round(200 * density));
+        View wifi = rowaAddSettingsStyleRow(rows, popup, "Wi-Fi", () -> rowaChooseNetwork(false));
+        View bluetooth = rowaAddSettingsStyleRow(rows, popup, getString(R.string.rowa_bt_name), () -> rowaChooseNetwork(true));
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setWidth(Math.max(Math.round(200 * density), panel.getMeasuredWidth()));
+        dropIn(popup, panel, btnWifi, getResources().getBoolean(R.bool.rtl_menu_bar)
+                ? Gravity.START : Gravity.END);
+        (rowaBluetoothPreferred() ? bluetooth : wifi).requestFocus();
+    }
+
+    /** Move the existing weather TextView and separator; leave the Clock and date TextClock intact. */
+    /** ROWA_HEADER_STYLE_V3: plain icon + temperature; divider only between date and weather. */
+    private void rowaPositionWeatherAfterDate() {
+        View weather = findViewById(R.id.rowaWeather);
+        View divider = findViewById(R.id.clockDivider);
+        View date = findViewById(R.id.date);
+        View clock = findViewById(R.id.clock);
+        if (weather == null || divider == null || date == null || clock == null) return;
+        if (!(clock.getParent() instanceof LinearLayout)
+                || !(date.getParent() instanceof LinearLayout)) return;
+        LinearLayout clockRow = (LinearLayout) clock.getParent();
+        LinearLayout dateColumn = (LinearLayout) date.getParent();
+        if (weather.getParent() != clockRow || divider.getParent() != clockRow
+                || dateColumn.getParent() != clockRow) return;
+        clockRow.removeView(weather);
+        clockRow.removeView(divider);
+        clockRow.removeView(dateColumn);
+
+        // No custom pill, border, tint, or weather background. Just its weather symbol and Celsius value.
+        weather.setBackground(null);
+        weather.setPadding(0, 0, 0, 0);
+        if (weather instanceof TextView) {
+            ((TextView) weather).setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 15f);
+            ((TextView) weather).setTextColor(0xE6FFFFFF);
+        }
+
+        LinearLayout trailing = new LinearLayout(this);
+        trailing.setOrientation(LinearLayout.HORIZONTAL);
+        trailing.setGravity(Gravity.BOTTOM);
+        trailing.addView(dateColumn, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams dividerLp = new LinearLayout.LayoutParams(
+                Math.max(1, Math.round(density)), Math.round(24 * density));
+        dividerLp.setMargins(Math.round(5 * density), 0,
+                Math.round(8 * density), Math.round(8 * density));
+        trailing.addView(divider, dividerLp);
+        LinearLayout.LayoutParams weatherLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        weatherLp.bottomMargin = Math.round(9 * density);
+        trailing.addView(weather, weatherLp);
+        divider.setVisibility(weather.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
+        weather.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or_, ob) -> {
+            int wanted = v.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE;
+            if (divider.getVisibility() != wanted) divider.setVisibility(wanted);
+        });
+        clockRow.addView(trailing, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+    }
+
+    /** Android 14 doesn't let third-party launchers enumerate/force-stop every running app.
+     * Show recently used apps obtained with Usage Access; opening each app's Info page
+     * lets the owner press the TV's real Force Stop control, with confirmation.
+     */
+    /** ROWA_HEADER_STYLE_V3: Settings-style recent-app chooser (not a running-process/kill-all UI). */
+    private void rowaShowAppsMenu() {
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        PopupWindow popup = glassPopup(panel, Math.round(265 * density));
+        rowaAddSettingsStyleRow(rows, popup, getString(R.string.rowa_manage_all_apps),
+                () -> open(systemIntent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS)));
+        java.util.List<android.app.usage.UsageStats> recent = rowaRecentApps();
+        if (recent.isEmpty()) {
+            rowaAddSettingsStyleRow(rows, popup, getString(R.string.rowa_usage_access_recent),
+                    () -> open(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
+        } else {
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            int shown = 0;
+            for (android.app.usage.UsageStats item : recent) {
+                final String pkg = item.getPackageName();
+                if (!seen.add(pkg)) continue;
+                try {
+                    android.content.pm.ApplicationInfo ai = getPackageManager().getApplicationInfo(pkg, 0);
+                    if ((ai.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                            || pkg.equals(getPackageName())) continue;
+                    if (getPackageManager().getLeanbackLaunchIntentForPackage(pkg) == null
+                            && getPackageManager().getLaunchIntentForPackage(pkg) == null) continue;
+                    final String label = getPackageManager().getApplicationLabel(ai).toString();
+                    rowaAddSettingsStyleRow(rows, popup, label,
+                            () -> open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    android.net.Uri.parse("package:" + pkg))));
+                    if (++shown >= 10) break;
+                } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {
+                    // An uninstalled or invisible application is not offered.
+                }
+            }
+            if (shown == 0) {
+                rowaAddSettingsStyleRow(rows, popup, getString(R.string.rowa_open_app_settings),
+                        () -> open(systemIntent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS)));
+            }
+        }
+        // Exactly the Settings menu's row styling, but constrained in height for a small TV.
+        android.view.ViewGroup container = (android.view.ViewGroup) rows.getParent();
+        container.removeView(rows);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setFillViewport(false);
+        scroll.addView(rows, new android.widget.ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        container.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setWidth(Math.round(265 * density));
+        popup.setHeight(Math.min(panel.getMeasuredHeight(), Math.round(330 * density)));
+        dropIn(popup, panel, stats, getResources().getBoolean(R.bool.rtl_menu_bar)
+                ? Gravity.START : Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    private java.util.List<android.app.usage.UsageStats> rowaRecentApps() {
+        android.app.usage.UsageStatsManager usage =
+                (android.app.usage.UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+        if (usage == null) return java.util.Collections.emptyList();
+        long now = System.currentTimeMillis();
+        java.util.List<android.app.usage.UsageStats> list =
+                usage.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_DAILY,
+                        now - 12L * 60 * 60 * 1000, now);
+        if (list == null) return java.util.Collections.emptyList();
+        java.util.Collections.sort(list,
+                (a, b) -> Long.compare(b.getLastTimeUsed(), a.getLastTimeUsed()));
+        return list;
+    }
+
+
     private void openNetworkPill() {
-        Intent i = vpnPill ? null : vpnAppIntent();
+        Intent i = vpnApp.isEmpty() ? null : getPackageManager().getLeanbackLaunchIntentForPackage(vpnApp);
+        if (i == null && !vpnApp.isEmpty()) i = getPackageManager().getLaunchIntentForPackage(vpnApp);
         open(i != null ? i : systemIntent(Settings.ACTION_WIFI_SETTINGS));
-    }
-
-    /** vpn_app's launch intent, or null when none is set or it is not installed. */
-    private Intent vpnAppIntent() {
-        if (vpnApp.isEmpty()) return null;
-        Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(vpnApp);
-        return i != null ? i : getPackageManager().getLaunchIntentForPackage(vpnApp);
-    }
-
-    /**
-     * vpn_pill: the VPN app, where it is switched on and off. Without one installed, the App library to pick from, or
-     * Android's VPN settings when the theme turned the library off.
-     */
-    private void openVpnPill() {
-        Intent i = vpnAppIntent();
-        if (i != null || !appLibraryEnabled) {
-            open(i != null ? i : systemIntent(Settings.ACTION_VPN_SETTINGS));
-            return;
-        }
-        onLibraryRequested();
-        libraryFromVpnPill = true;
-    }
-
-    /** vpn_pill: the pill outlined in green with a lock while a VPN is up, outlined in red "VPN off" while it is not;
-     *  solid with a white ring only while focused. */
-    private void updateVpnPill(boolean vpn) {
-        int state = VpnBadge.pillState(vpn, vpnAppIntent() != null);
-        if (state == VpnBadge.PILL_HIDDEN) {
-            if (btnVpn.getVisibility() == View.GONE) return;
-            boolean focused = btnVpn.hasFocus();
-            btnVpn.setVisibility(View.GONE);
-            if (focused) (btnWifi.getVisibility() == View.VISIBLE ? btnWifi : firstTopButton()).requestFocus();
-            return;
-        }
-        if (state != vpnPillState) {
-            vpnPillState = state;
-            boolean up = state == VpnBadge.PILL_UP;
-            // The state colour at rest (the pill is an outline then), the contrasting ink on the solid focused fill.
-            ColorStateList ink = new ColorStateList(
-                    new int[][]{new int[]{android.R.attr.state_focused}, new int[0]},
-                    new int[]{VpnBadge.pillInkColor(up, true), VpnBadge.pillInkColor(up, false)});
-            btnVpn.setText(up ? R.string.vpn : R.string.vpn_off);
-            btnVpn.setTextColor(ink);
-            btnVpn.setBackground(VpnBadge.pillBackground(up, density));
-            btnVpn.setCompoundDrawablesRelativeWithIntrinsicBounds(up ? R.drawable.ic_lock : 0, 0, 0, 0);
-            btnVpn.setCompoundDrawableTintList(ink);
-        }
-        btnVpn.setVisibility(View.VISIBLE);
     }
 
 
@@ -3040,13 +3209,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!prefs.edit().putInt(OpenOnStart.BOOT_KEY, boot).commit()) return false;
         Intent i = bootToLiveTv ? liveTvIntent() : OpenOnStart.intent(getPackageManager(), app);
         if (i == null) return false;
-        // open_on_start_network_wait: Home stays on screen until the network is back or the wait is over.
-        if (openOnStartWaitMs > 0 && !OpenOnStart.online(this)) {
-            startPending = i;
-            startDeadline = SystemClock.elapsedRealtime() + openOnStartWaitMs;
-            handler.postDelayed(openWhenOnline, 500);
-            return false;
-        }
         open(i);
         return true;
     }
@@ -3094,11 +3256,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    /** `input_sources` in config.xml or a theme: "HW5=23" maps the framework input whose id ends in /HW5 to a vendor
+    /** `input_sources` in config.xml: "HW5=23" maps the framework input whose id ends in /HW5 to a vendor
      *  source number; "HW8=-" leaves that input out of the Inputs menu (a port the board reports but the set
      *  does not have). Returns the number, -1 for a left-out input, or null when the input is not listed. */
     private Integer mappedSource(String inputId) {
-        return InputSources.mapped(inputSources, inputId);
+        if (inputId == null) return null;
+        String hw = inputId.substring(inputId.lastIndexOf('/') + 1);
+        for (String m : getResources().getStringArray(R.array.input_sources)) {
+            int eq = m.indexOf('=');
+            if (eq <= 0 || !m.substring(0, eq).trim().equals(hw)) continue;
+            String v = m.substring(eq + 1).trim();
+            if (v.equals("-")) return -1;
+            try { return Integer.parseInt(v); } catch (NumberFormatException e) { return null; }
+        }
+        return null;
     }
 
     /** Switches to a passthrough input (HDMI, AV). An input mapped in `input_sources` is opened by sending
@@ -3180,9 +3351,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final PopupWindow popup = glassPopup(panel, width);
 
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
-        // inputs_connected_only: ports without a connected device and the AV jacks fold behind a "More inputs" row.
-        boolean connectedOnly = inputsConnectedOnly;
-        List<View> folded = new ArrayList<>();
         boolean sawNonHdmi = false;
         String tunerId = null;
         boolean tunerIsHw = false;
@@ -3254,14 +3422,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 if (hdmi && !label.toUpperCase(Locale.ROOT).contains("HDMI")) label = "HDMI " + label;
                 CharSequence custom = InputNames.tidy(info.loadCustomLabel(this));
                 boolean named = custom != null && custom.length() > 0 && !custom.toString().equals(label);
-                if (!hdmi && rows.getChildCount() > 0 && !sawNonHdmi) {
-                    View line = addSeparator(rows);
-                    if (connectedOnly) fold(line, folded);
-                }
+                if (!hdmi && rows.getChildCount() > 0 && !sawNonHdmi) addSeparator(rows);
                 if (!hdmi) sawNonHdmi = true;
                 List<TvInputInfo> devices = cecDevices.get(info.getId());
                 if (devices != null) {
-                    // "Apple TV · HDMI 1": the device's own name (or the one given to it or to its port in
+                    // "Apple TV В· HDMI 1": the device's own name (or the one given to it or to its port in
                     // Settings > Inputs), then the port. Opening the device's input also makes it the CEC
                     // active source, which wakes it.
                     for (TvInputInfo device : devices) {
@@ -3270,8 +3435,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                         String deviceLabel = name == null || name.length() == 0 ? label : name + " \u00B7 " + label;
                         final String deviceId = device.getId();
                         int state = hdmiStateBogus ? -1 : tim.getInputState(deviceId);
-                        View row = addInputRow(rows, popup, R.drawable.ic_input, deviceLabel, state, () -> openInput(deviceId));
-                        if (connectedOnly && InputFold.folds(true, state)) fold(row, folded);
+                        addInputRow(rows, popup, R.drawable.ic_input, deviceLabel, state, () -> openInput(deviceId));
                     }
                     continue;
                 }
@@ -3281,25 +3445,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 // Analog AV jacks have no hotplug detection, and some TVs report them as always connected
                 // (TCL Smart TV Pro G03 says "Connected" with nothing plugged in), so AV rows show no state.
                 int state = !hdmi || hdmiStateBogus ? -1 : tim.getInputState(id);
-                View row = addInputRow(rows, popup, hdmi ? R.drawable.ic_input : R.drawable.ic_av, label, state,
+                addInputRow(rows, popup, hdmi ? R.drawable.ic_input : R.drawable.ic_av, label, state,
                         () -> openInput(id));
-                if (connectedOnly && InputFold.folds(hdmi, state)) fold(row, folded);
             }
-        }
-        if (!folded.isEmpty()) {
-            View more = getLayoutInflater().inflate(R.layout.item_input, rows, false);
-            ((ImageView) more.findViewById(R.id.icon)).setImageResource(R.drawable.ic_input);
-            ((TextView) more.findViewById(R.id.title)).setText(R.string.more_inputs);
-            more.findViewById(R.id.status).setVisibility(View.GONE);
-            more.findViewById(R.id.dot).setVisibility(View.GONE);
-            more.setOnClickListener(v -> {
-                for (View f : folded) f.setVisibility(View.VISIBLE);
-                rows.removeView(more);
-                for (View f : folded) {
-                    if (f.isFocusable()) { f.requestFocus(); break; }
-                }
-            });
-            rows.addView(more);
         }
         // Coocaa OS registers nothing with TvInputManager; com.skyworth.tv lists its sources instead.
         if (rows.getChildCount() == 0) {
@@ -3351,18 +3499,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         int alignment = getResources().getBoolean(R.bool.rtl_menu_bar) != underGear ? Gravity.END : Gravity.START;
         dropIn(popup, panel, anchor, alignment);
-        for (int i = 0; i < rows.getChildCount(); i++) {
-            View child = rows.getChildAt(i);
-            if (child.getVisibility() == View.VISIBLE && child.isFocusable()) { child.requestFocus(); break; }
-        }
-    }
-
-    private static void fold(View view, List<View> folded) {
-        view.setVisibility(View.GONE);
-        folded.add(view);
+        rows.getChildAt(0).requestFocus();
     }
 
     private PopupWindow glassPopup(View panel, int width) {
+        rowaV15ApplyPanelAlpha(panel);
         final PopupWindow popup = new PopupWindow(panel, width, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));   // needed for Back to dismiss
         popup.setOutsideTouchable(true);
@@ -3386,14 +3527,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }
 
-    private View addSeparator(LinearLayout rows) {
+    private void addSeparator(LinearLayout rows) {
         View line = new View(this);
         line.setBackgroundColor(0x1FFFFFFF);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) density);
         int m = (int) (6 * density), h = (int) (12 * density);
         lp.setMargins(h, m, h, m);
         rows.addView(line, lp);
-        return line;
     }
 
     private View addInputRow(LinearLayout rows, PopupWindow popup, int iconRes, String title, int state, Runnable action) {
@@ -3418,6 +3558,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             popup.dismiss();
             action.run();
         });
+        RowaMenuMarquee.bind(row, (TextView) row.findViewById(R.id.title), (TextView) row.findViewById(R.id.status));
         rows.addView(row);
         return row;
     }
@@ -3440,6 +3581,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             status.setVisibility(View.VISIBLE);
         }
         addInputRow(rows, popup, R.drawable.ic_swap_vert, getString(R.string.reorder), -1, this::toggleReorder);
+        addInputRow(rows, popup, R.drawable.ic_settings, getString(R.string.app_appearance_edit), -1,
+                () -> startActivity(new Intent(this, AppAppearanceActivity.class)));
         if (launcherSettingsButton) {
             addInputRow(rows, popup, R.drawable.ic_home_settings_pill, getString(R.string.launcher_settings), -1,
                     () -> startActivityForResult(new Intent(this, LauncherSettingsActivity.class), LAUNCHER_SETTINGS_REQUEST));
@@ -3454,11 +3597,788 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /** The header opens launcher settings directly; hold OK keeps the extra home actions available. */
+    // ROWA_APPEARANCE_V6: Focus-safe live appearance controls. Right/Left cycles values;
+    // small dots show the selected value. Main, Home and volume remain untouched.
+    private static String rowaAppearanceReopenKey;
+    private GlassView rowaGlowPreview;
+
+    // ROWA_V11: native SeekBar + D-pad support, reusing the existing focused Settings row.
+    private void rowaMarginSlider(LinearLayout rows) {
+        LinearLayout row = (LinearLayout) getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        row.setTag("margins");
+        row.findViewById(R.id.icon).setVisibility(View.GONE);
+        row.findViewById(R.id.dot).setVisibility(View.GONE);
+        row.removeView(row.findViewById(R.id.status));
+        ViewGroup.LayoutParams rlp = row.getLayoutParams();
+        rlp.height = Math.round(68 * density);
+        row.setLayoutParams(rlp);
+        TextView title = row.findViewById(R.id.title);
+        title.setText(R.string.rowa_v11_margins);
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.VERTICAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setLayoutParams(new LinearLayout.LayoutParams(Math.round(150 * density),
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        TextView value = new TextView(this);
+        value.setTextColor(getResources().getColorStateList(R.drawable.pill_text, getTheme()));
+        value.setDuplicateParentStateEnabled(true);
+        value.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f);
+        value.setGravity(Gravity.CENTER);
+        android.widget.SeekBar slider = new android.widget.SeekBar(this);
+        slider.setMax(100);
+        slider.setProgress(RowaAppearance.marginPercent(this));
+        slider.setFocusable(false);
+        slider.setClickable(false);
+        slider.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                Math.round(26 * density)));
+        value.setText(RowaAppearance.marginPercent(this) + "%");
+        controls.addView(value);
+        controls.addView(slider);
+        row.addView(controls);
+        java.util.function.IntConsumer adjust = (amount) -> {
+            int current = RowaAppearance.marginPercent(this);
+            int next = Math.max(0, Math.min(100, current + amount));
+            if (next == current) return;
+            RowaAppearance.setMarginPercent(this, next);
+            slider.setProgress(next);
+            value.setText(next + "%");
+            RowaAppearance.applyHeader(this);
+        };
+        row.setOnKeyListener((v, keyCode, event) -> {
+            if (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                // One step per physical press, then accelerated repeat if held.
+                if (event.getRepeatCount() == 0 || event.getRepeatCount() % 3 == 0)
+                    adjust.accept(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 5 : -5);
+            }
+            return true;
+        });
+        row.setOnClickListener(v -> adjust.accept(5));
+        rows.addView(row);
+    }
+
+    private void rowaWeatherLocationRow(LinearLayout rows) {
+        LinearLayout row = (LinearLayout) getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        row.setTag("weatherSource");
+        row.findViewById(R.id.icon).setVisibility(View.GONE);
+        row.findViewById(R.id.dot).setVisibility(View.GONE);
+        TextView title = row.findViewById(R.id.title);
+        title.setText(R.string.rowa_v11_weather_source);
+        TextView status = row.findViewById(R.id.status);
+        status.setText(RowaWeatherSettings.isDeviceMode(this)
+                ? R.string.rowa_v11_device : R.string.rowa_v11_city);
+        status.setVisibility(View.VISIBLE);
+        row.setOnClickListener(v -> {
+            if (openPopup != null) openPopup.dismiss();
+            root.post(this::rowaWeatherSourceMenu);
+        });
+        rows.addView(row);
+    }
+
+    private void rowaWeatherSourceMenu() {
+        View anchor = findViewById(R.id.btnSettings);
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        PopupWindow popup = glassPopup(panel, Math.round(300 * density));
+        addSettingsMenuRow(rows, popup, R.string.rowa_v11_device, () -> {
+            RowaWeatherSettings.selectDevice(this);
+        });
+        addSettingsMenuRow(rows, popup, R.string.rowa_v11_city, this::rowaAskWeatherCity);
+        dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
+                ? Gravity.START : Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    // ROWA_V12: live city autocomplete, using the same Open-Meteo geocoder as v11.
+    private void rowaAskWeatherCity() {
+        final android.widget.AutoCompleteTextView field =
+                new android.widget.AutoCompleteTextView(this);
+        field.setSingleLine(true);
+        field.setThreshold(2);
+        field.setDropDownHeight(Math.round(240 * density));
+        field.setDropDownWidth(Math.min(Math.round(420 * density),
+                getResources().getDisplayMetrics().widthPixels - Math.round(40 * density)));
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT |
+                android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        field.setText(RowaWeatherSettings.cityName(this));
+        field.setSelectAllOnFocus(true);
+        final int pad = Math.round(18 * density);
+        field.setPadding(pad, pad, pad, pad);
+        final java.util.ArrayList<RowaWeatherSettings.CityHit> hits = new java.util.ArrayList<>();
+        final android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(this,
+                android.R.layout.simple_dropdown_item_1line, new java.util.ArrayList<String>()) {
+            @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView suggestion = (TextView) super.getView(position, convertView, parent);
+                suggestion.setTextColor(getResources().getColorStateList(R.drawable.pill_text));
+                suggestion.setBackgroundResource(R.drawable.input_row_bg);
+                suggestion.setSingleLine(true);
+                suggestion.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                int space = Math.round(12 * density);
+                suggestion.setPadding(space, space, space, space);
+                return suggestion;
+            }
+        };
+        field.setAdapter(adapter);
+        final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+        final int[] sequence = {0};
+        final boolean[] picked = {false};
+        final RowaWeatherSettings.CityHit[] selected = {null};
+        final Runnable[] pending = {null};
+        field.setOnItemClickListener((parent, item, position, id) -> {
+            String display = String.valueOf(adapter.getItem(position));
+            selected[0] = null;
+            for (RowaWeatherSettings.CityHit city : hits) {
+                if (city.display.equals(display)) { selected[0] = city; break; }
+            }
+            picked[0] = true;
+            sequence[0]++;
+        });
+        field.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (picked[0]) { picked[0] = false; return; }
+                selected[0] = null;
+                if (pending[0] != null) ui.removeCallbacks(pending[0]);
+                final int generation = ++sequence[0];
+                final String query = s.toString().trim();
+                if (query.length() < 2) {
+                    adapter.clear(); adapter.notifyDataSetChanged(); return;
+                }
+                pending[0] = () -> RowaWeatherSettings.suggestCities(query, results -> {
+                    if (generation != sequence[0] || field.getWindowToken() == null) return;
+                    hits.clear(); hits.addAll(results);
+                    adapter.clear();
+                    for (RowaWeatherSettings.CityHit city : results) adapter.add(city.display);
+                    adapter.notifyDataSetChanged();
+                    if (!results.isEmpty() && field.hasFocus()) field.showDropDown();
+                });
+                ui.postDelayed(pending[0], 420L);
+            }
+            public void afterTextChanged(android.text.Editable text) { }
+        });
+        // Autocomplete suggestions use the same contrasting glass focus colors.
+        field.setDropDownBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xF8262B34));
+        android.app.Dialog dialog = RowaGlassDialog.input(this,
+                getString(R.string.rowa_v11_city_prompt), field, null, () -> {
+                    if (selected[0] != null && selected[0].display.equals(field.getText().toString()))
+                        RowaWeatherSettings.selectResolvedCity(this, selected[0]);
+                    else RowaWeatherSettings.selectCity(this, field.getText().toString().trim());
+                }, null, null);
+        dialog.setOnDismissListener(d -> {
+            sequence[0]++;
+            if (pending[0] != null) ui.removeCallbacks(pending[0]);
+        });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == ROWA_BT_CONNECT_REQUEST) {
+            if (grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED)
+                rowaLaunchPairingActivity();
+            else Toast.makeText(this, R.string.rowa_v12_pairing_unavailable, Toast.LENGTH_LONG).show();
+        }
+        if (requestCode == RowaWeatherSettings.LOCATION_REQUEST)
+            RowaWeatherSettings.onPermissionResult(this);
+    }
+
+    // ROWA_V12: Appearance controls and user greeting, kept in the existing launcher UI.
+    private void rowaGreetingNameRow(LinearLayout rows) {
+        LinearLayout row = (LinearLayout) getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        row.setTag("greetingName");
+        row.findViewById(R.id.icon).setVisibility(View.GONE);
+        row.findViewById(R.id.dot).setVisibility(View.GONE);
+        TextView title = row.findViewById(R.id.title);
+        title.setText(R.string.rowa_v12_greeting_name);
+        TextView status = row.findViewById(R.id.status);
+        String saved = RowaPersonalization.savedName(this);
+        status.setText(saved.isEmpty() ? getString(R.string.rowa_v12_greeting_auto) : saved);
+        status.setVisibility(View.VISIBLE);
+        row.setOnClickListener(v -> {
+            if (openPopup != null) openPopup.dismiss();
+            root.post(this::rowaAskGreetingName);
+        });
+        rows.addView(row);
+    }
+
+    private void rowaAskGreetingName() {
+        final android.widget.EditText field = new android.widget.EditText(this);
+        field.setSingleLine(true);
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT |
+                android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        field.setText(RowaPersonalization.savedName(this));
+        field.setSelectAllOnFocus(true);
+        int pad = Math.round(20f * density);
+        field.setPadding(pad, pad, pad, pad);
+        RowaGlassDialog.input(this, getString(R.string.rowa_v12_greeting_prompt),
+                field, getString(R.string.rowa_v12_greeting_hint), () -> {
+                    RowaPersonalization.save(this, field.getText().toString());
+                    updateGreeting();
+                }, getString(R.string.rowa_v12_greeting_clear), () -> {
+                    RowaPersonalization.save(this, "");
+                    updateGreeting();
+                });
+    }
+
+    /** Use the launcher's existing focus/marquee component, not a new focus handler.
+     *  Appearance v6 options already use it; v11's additional rows do not. */
+    private void rowaFixAppearanceContrast(LinearLayout rows) {
+        for (int n = 0; n < rows.getChildCount(); n++) {
+            View row = rows.getChildAt(n);
+            Object tag = row.getTag();
+            if (!("margins".equals(tag) || "weatherSource".equals(tag)
+                    || "greetingName".equals(tag))) continue;
+            TextView title = row.findViewById(R.id.title);
+            if (title == null) continue;
+            java.util.ArrayList<TextView> others = new java.util.ArrayList<>();
+            rowaGatherText(row, title, others);
+            RowaMenuMarquee.bind(row, title, others.toArray(new TextView[0]));
+        }
+    }
+
+    private void rowaGatherText(View current, TextView title,
+                                java.util.ArrayList<TextView> others) {
+        if (current instanceof TextView && current != title) {
+            others.add((TextView) current);
+        } else if (current instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) current;
+            for (int i = 0; i < group.getChildCount(); i++)
+                rowaGatherText(group.getChildAt(i), title, others);
+        }
+    }
+
+    // Pairing is launched by Android TV Settings itself. Its activity may demand
+    // BLUETOOTH_CONNECT on Android 12+; request only when the user selects Pair.
+    private static final int ROWA_BT_CONNECT_REQUEST = 6122;
+    private void rowaStartBluetoothPairing() {
+        if (android.os.Build.VERSION.SDK_INT >= 31 &&
+                checkSelfPermission("android.permission.BLUETOOTH_CONNECT") !=
+                        android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{"android.permission.BLUETOOTH_CONNECT"},
+                    ROWA_BT_CONNECT_REQUEST);
+            return;
+        }
+        rowaLaunchPairingActivity();
+    }
+
+    private void rowaLaunchPairingActivity() {
+        Intent[] targets = new Intent[]{
+                new Intent("com.google.android.intent.action.CONNECT_INPUT")
+                        .setClassName("com.android.tv.settings",
+                                "com.android.tv.settings.accessories.AddAccessoryActivity"),
+                new Intent("com.google.android.intent.action.CONNECT_INPUT")
+                        .setPackage("com.android.tv.settings"),
+                new Intent("com.google.android.intent.action.CONNECT_INPUT")
+        };
+        for (Intent target : targets) {
+            try {
+                startActivity(target);
+                return;
+            } catch (ActivityNotFoundException | SecurityException denied) {
+                android.util.Log.w("ROWA_BT_V12", "Pairing candidate unavailable: " + target, denied);
+            }
+        }
+        Toast.makeText(this, R.string.rowa_v12_pairing_unavailable, Toast.LENGTH_LONG).show();
+    }
+
+    // ROWA_V13: intercept Back/ESC before focusable appearance rows consume keys.
+    // Does not replace their D-pad Left/Right or OK handlers.
+    private void rowaEnableAppearanceBack(final PopupWindow popup, View panel) {
+        android.widget.FrameLayout backGuard = new android.widget.FrameLayout(this) {
+            @Override
+            public boolean dispatchKeyEvent(KeyEvent event) {
+                final int key = event.getKeyCode();
+                if (key == KeyEvent.KEYCODE_BACK || key == KeyEvent.KEYCODE_ESCAPE) {
+                    if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()
+                            && popup.isShowing()) {
+                        popup.dismiss();
+                    }
+                    // Consume BOTH down and up: never pass Back to the Home activity.
+                    return true;
+                }
+                return super.dispatchKeyEvent(event);
+            }
+        };
+        // PopupWindow has its own focused window; Activity.dispatchKeyEvent alone
+        // cannot see the TV remote's Back press while this popup is focused.
+        backGuard.addView(panel, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        popup.setContentView(backGuard);
+        popup.setFocusable(true);
+    }
+
+    // ROWA_V15: a restrained appearance menu, navigable entirely by D-pad.
+    private static final int ROWA_V15_WALLPAPER_PICK = 6125;
+
+    private void rowaV15WallpaperRows(LinearLayout rows, final PopupWindow popup) {
+        addSettingsMenuRow(rows, popup, R.string.rowa_v156_default_wallpaper_style, () ->
+                RowaWallpaperStyleDialog.show(this, getString(R.string.rowa_v156_default_wallpaper_style),
+                        RowaWallpaperStyle.defaults(this),
+                        updated -> { RowaWallpaperStyle.setDefaults(this, updated); recreate(); }));
+        // Source folder is selected inside Choose background images; do not duplicate that action here.
+        // Built-in single-column gallery and in-panel source selection. Selection REPLACES the collection.
+        addSettingsMenuRow(rows, popup, R.string.rowa_v15_add_wallpaper,
+                () -> startActivityForResult(new Intent(this, RowaDownloadsBrowserActivity.class),
+                        ROWA_V15_WALLPAPER_PICK));
+        // Preserve the existing PC/ADB import workflow, but keep the menu uncluttered
+        // unless files were actually staged via Send-Backgrounds.ps1.
+        if (RowaVisualOptions.hasTransferredImages(this)) {
+            addSettingsMenuRow(rows, popup, R.string.rowa_browser_import_transferred, () ->
+                    RowaVisualOptions.importTransferred(this, imported -> {
+                        Toast.makeText(this, imported > 0 ?
+                                getString(R.string.rowa_v15_wallpaper_success, imported) :
+                                getString(R.string.rowa_v15_wallpaper_error), Toast.LENGTH_LONG).show();
+                        if (imported > 0) recreate();
+                    }));
+        }
+        addSettingsMenuRow(rows, popup, R.string.rowa_v15_clear_wallpaper, () -> {
+            RowaVisualOptions.clearImages(this);
+            recreate();
+        });
+    }
+
+    /** Time-based or every-Home wallpaper rotation, editable directly with the TV remote. */
+    private void rowaV15RotationRow(LinearLayout rows) {
+        LinearLayout row = (LinearLayout) getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        row.setTag("rowaRotation");
+        row.findViewById(R.id.icon).setVisibility(View.GONE);
+        row.findViewById(R.id.dot).setVisibility(View.GONE);
+        TextView title = row.findViewById(R.id.title);
+        title.setText(R.string.rowa_rotation_setting);
+        TextView value = row.findViewById(R.id.status);
+        value.setVisibility(View.VISIBLE);
+        value.setDuplicateParentStateEnabled(true);
+        value.setText(RowaWallpaperRotation.label(this));
+        java.util.function.IntConsumer adjust = step -> {
+            RowaWallpaperRotation.change(this, step);
+            value.setText(RowaWallpaperRotation.label(this));
+            row.setContentDescription(getString(R.string.rowa_rotation_setting) + ": "
+                    + RowaWallpaperRotation.label(this));
+            wallpaperPlayer.onRotationSettingChanged();
+        };
+        row.setContentDescription(getString(R.string.rowa_rotation_setting) + ": "
+                + RowaWallpaperRotation.label(this));
+        row.setOnClickListener(v -> adjust.accept(1));
+        row.setOnKeyListener((v, key, event) -> {
+            if (key != KeyEvent.KEYCODE_DPAD_LEFT && key != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
+                adjust.accept(key == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+            return true;
+        });
+        rows.addView(row);
+    }
+
+    private void rowaV15OpacityRow(LinearLayout rows, View panel) {
+        LinearLayout row = (LinearLayout) getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        row.setTag("rowaOpacity");
+        row.findViewById(R.id.icon).setVisibility(View.GONE);
+        row.findViewById(R.id.dot).setVisibility(View.GONE);
+        TextView title = row.findViewById(R.id.title);
+        title.setText(R.string.rowa_v15_opacity);
+        TextView status = row.findViewById(R.id.status);
+        int value = RowaVisualOptions.panelOpacity(this);
+        status.setText(value + "%");
+        status.setVisibility(View.VISIBLE);
+        status.setDuplicateParentStateEnabled(true);
+        java.util.function.IntConsumer adjust = (amount) -> {
+            int before = RowaVisualOptions.panelOpacity(this);
+            int next = Math.max(35, Math.min(95, before + amount));
+            if (next == before) return;
+            RowaVisualOptions.setPanelOpacity(this, next);
+            status.setText(next + "%");
+            rowaV15ApplyPanelAlpha(panel);
+            RowaAppearance.applyHeader(this);
+        };
+        row.setOnClickListener(v -> adjust.accept(10));
+        row.setOnKeyListener((v, keyCode, event) -> {
+            if (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT)
+                return false;
+            if (event.getAction() == KeyEvent.ACTION_DOWN &&
+                    (event.getRepeatCount() == 0 || event.getRepeatCount() % 3 == 0))
+                adjust.accept(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 10 : -10);
+            return true;
+        });
+        rows.addView(row);
+    }
+
+    private void rowaV15ApplyPanelAlpha(View panel) {
+        if (panel != null && panel.getBackground() != null)
+            panel.getBackground().mutate().setAlpha(RowaVisualOptions.panelAlpha(this));
+    }
+
+    /** Follow the row focus explicitly: nested value/dot labels do not inherit it on every TV. */
+    private void rowaV15Contrast(LinearLayout rows) {
+        for (int i = 0; i < rows.getChildCount(); i++) {
+            View row = rows.getChildAt(i);
+            if (!(row instanceof ViewGroup) || !row.isFocusable()) continue;
+            View.OnFocusChangeListener previous = row.getOnFocusChangeListener();
+            row.setOnFocusChangeListener((v, focused) -> {
+                if (previous != null) previous.onFocusChange(v, focused);
+                rowaV15ContrastTexts(v, focused);
+            });
+            rowaV15ContrastTexts(row, row.isFocused());
+        }
+    }
+    private void rowaV15ContrastTexts(View view, boolean focused) {
+        if (view instanceof TextView) {
+            TextView text = (TextView) view;
+            text.setTextColor(focused ? 0xFF111111 : 0xFFFFFFFF);
+        } else if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                rowaV15ContrastTexts(group.getChildAt(i), focused);
+        }
+    }
+
+    private void rowaShowAppearanceMenu() {
+        rowaShowAppearanceMenu("buttons");
+    }
+
+    private void rowaShowAppearanceMenu(String selectedKey) {
+        View anchor = findViewById(R.id.btnSettings);
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, Math.round(380 * density));
+        rowaEnableAppearanceBack(popup, panel);
+
+        rowaAppearanceOption(rows, "buttons", R.string.rowa_top_buttons);
+        rowaAppearanceOption(rows, "clock", R.string.rowa_clock_size);
+        rowaAppearanceOption(rows, "weather", R.string.rowa_weather_size);
+        rowaAppearanceOption(rows, "cards", R.string.rowa_card_size);
+        rowaMarginSlider(rows);
+        rowaWeatherLocationRow(rows);
+        rowaGreetingNameRow(rows);
+        rowaV15OpacityRow(rows, panel);
+        rowaV15RotationRow(rows);
+        rowaV15WallpaperRows(rows, popup);
+        rowaAppearanceOption(rows, "glow", R.string.rowa_glow_strength);
+        // A small live sample makes glow changes visible even while the menu has focus
+        // and the focused app tile behind it is no longer highlighted.
+        android.widget.FrameLayout sample = new android.widget.FrameLayout(this);
+        LinearLayout.LayoutParams sampleLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.round(62 * density));
+        sample.setLayoutParams(sampleLp);
+        rowaGlowPreview = new GlassView(this, null);
+        rowaGlowPreview.setGlowLevel(RowaAppearance.get(this, "glow"));
+        android.widget.FrameLayout.LayoutParams previewLp = new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.round(56 * density));
+        previewLp.setMargins(Math.round(44 * density), 0, Math.round(44 * density), 0);
+        sample.addView(rowaGlowPreview, previewLp);
+        TextView sampleLabel = new TextView(this);
+        sampleLabel.setText(R.string.rowa_glow_preview);
+        sampleLabel.setTextColor(0xE6FFFFFF);
+        sampleLabel.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13f);
+        sampleLabel.setGravity(Gravity.CENTER);
+        sample.addView(sampleLabel, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.round(56 * density)));
+        rows.addView(sample);
+        rowaAppearanceOption(rows, "layout", R.string.rowa_layout_mode);
+        rowaAppearanceOption(rows, "columns", R.string.rowa_columns);
+
+        // Re-use exactly the launcher Settings dropdown's focus/OK behavior for reset.
+        addSettingsMenuRow(rows, popup, R.string.rowa_reset_appearance, () -> {
+            RowaAppearance.reset(this);
+            rowaAppearanceReopenKey = "buttons";
+            recreate();
+        });
+
+        rowaFixAppearanceContrast(rows);
+        rowaV15Contrast(rows);
+        // Same settings glass; scroll rather than showing an off-screen menu on a 32-inch TV.
+        ViewGroup container = (ViewGroup) rows.getParent();
+        container.removeView(rows);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setFillViewport(false);
+        scroll.addView(rows, new android.widget.ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        container.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setHeight(Math.min(panel.getMeasuredHeight(), Math.round(360 * density)));
+        dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
+                ? Gravity.START : Gravity.END);
+
+        View focus = null;
+        for (int i = 0; i < rows.getChildCount(); i++) {
+            View row = rows.getChildAt(i);
+            if (selectedKey != null && selectedKey.equals(row.getTag())) {
+                focus = row;
+                break;
+            }
+        }
+        if (focus == null) focus = rows.getChildAt(0);
+        final View selected = focus;
+        selected.requestFocus();
+        scroll.post(() -> scroll.smoothScrollTo(0, Math.max(0, selected.getTop() - Math.round(36 * density))));
+    }
+
+    private static int rowaAppearanceChoices(String key) {
+        return "layout".equals(key) || "columns".equals(key) || "glow".equals(key) ? 4 : 3;
+    }
+
+    private String rowaAppearanceValue(String key) {
+        switch (key) {
+            case "margins": return RowaAppearance.marginsName(this);
+            case "layout": return RowaAppearance.layoutName(this);
+            case "columns": return RowaAppearance.columnsName(this);
+            case "glow":
+                switch (RowaAppearance.get(this, "glow")) {
+                    case 1: return getString(R.string.rowa_glow_bright);
+                    case 2: return getString(R.string.rowa_glow_strong);
+                    case 3: return getString(R.string.rowa_glow_max);
+                    default: return getString(R.string.rowa_size_normal);
+                }
+            default: return RowaAppearance.sizeName(this, key);
+        }
+    }
+
+    private String rowaAppearanceDots(String key) {
+        StringBuilder dots = new StringBuilder();
+        for (int i = 0, n = rowaAppearanceChoices(key); i < n; i++) {
+            if (i > 0) dots.append("  ");
+            dots.append(i == RowaAppearance.get(this, key) ? '\u25CF' : '\u25CB');
+        }
+        return dots.toString();
+    }
+
+    private void rowaAppearanceStep(String key, int direction, TextView value, TextView dots) {
+        int count = rowaAppearanceChoices(key);
+        int next = (RowaAppearance.get(this, key) + direction + count) % count;
+        RowaAppearance.set(this, key, next);
+        value.setText(rowaAppearanceValue(key));
+        dots.setText(rowaAppearanceDots(key));
+        if ("buttons".equals(key) || "clock".equals(key) || "weather".equals(key)
+                || "glow".equals(key) || "margins".equals(key)) {
+            // Immediate preview: no Activity recreation, focus or popup loss.
+            RowaAppearance.applyHeader(this);
+            if (rowaGlowPreview != null) rowaGlowPreview.setGlowLevel(RowaAppearance.get(this, "glow"));
+        } else {
+            // Column count, grid mode and adapter cell sizes require rebuilding the grid.
+            // Reopen automatically on the same row; the user never needs to find Settings again.
+            rowaAppearanceReopenKey = key;
+            recreate();
+        }
+    }
+
+    private void rowaAppearanceOption(LinearLayout rows, String key, int labelRes) {
+        LinearLayout row = (LinearLayout) getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        row.setTag(key);
+        ViewGroup.LayoutParams rowLp = row.getLayoutParams();
+        rowLp.height = Math.round(62 * density);
+        row.setLayoutParams(rowLp);
+        row.findViewById(R.id.icon).setVisibility(View.GONE);
+        row.findViewById(R.id.dot).setVisibility(View.GONE);
+        TextView title = row.findViewById(R.id.title);
+        String titleText = getString(labelRes, "");
+        title.setText(titleText.replaceAll("[:\\s]+$", ""));
+        // The existing Settings rows already localize these labels with the normal resources.
+        TextView oldStatus = row.findViewById(R.id.status);
+        row.removeView(oldStatus);
+        LinearLayout values = new LinearLayout(this);
+        values.setOrientation(LinearLayout.VERTICAL);
+        values.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams valLp = new LinearLayout.LayoutParams(
+                Math.round(112 * density), ViewGroup.LayoutParams.WRAP_CONTENT);
+        values.setLayoutParams(valLp);
+        TextView value = new TextView(this);
+        value.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13f);
+        value.setTextColor(getResources().getColorStateList(R.drawable.pill_text, getTheme()));
+        value.setDuplicateParentStateEnabled(true);
+        value.setGravity(Gravity.CENTER);
+        value.setSingleLine(true);
+        value.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        value.setText(rowaAppearanceValue(key));
+        values.addView(value);
+        TextView dots = new TextView(this);
+        dots.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10f);
+        dots.setGravity(Gravity.CENTER);
+        dots.setTextColor(getResources().getColorStateList(R.drawable.pill_text, getTheme()));
+        dots.setDuplicateParentStateEnabled(true);
+        dots.setText(rowaAppearanceDots(key));
+        values.addView(dots);
+        row.addView(values);
+        row.setContentDescription(titleText + " " + rowaAppearanceValue(key));
+        // Allow ordinary OK to move forward; Right/Left steps without closing the menu.
+        row.setOnClickListener(v -> rowaAppearanceStep(key, +1, value, dots));
+        final boolean[] pressStarted = {false};
+        row.setOnKeyListener((v, code, event) -> {
+            boolean right = code == KeyEvent.KEYCODE_DPAD_RIGHT;
+            boolean left = code == KeyEvent.KEYCODE_DPAD_LEFT;
+            if (right || left) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                    rowaAppearanceStep(key, right ? +1 : -1, value, dots);
+                    row.setContentDescription(titleText + " " + rowaAppearanceValue(key));
+                }
+                return true;
+            }
+            if (code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER) return false;
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) pressStarted[0] = true;
+                return true;
+            }
+            boolean activate = pressStarted[0];
+            pressStarted[0] = false;
+            if (activate) rowaAppearanceStep(key, +1, value, dots);
+            return true;
+        });
+        RowaMenuMarquee.bind(row, title, value, dots);
+        rows.addView(row);
+    }
+
+    // ROWA_UI_V7: weather shares the clock's baseline; preserve the complete date on narrow TVs.
+    // If the full clock + date + full-size weather cannot coexist with the top pills,
+    // move those pills to a second right-aligned header row rather than truncating the date.
+    /** ROWA_UI_V8: weather stays immediately after the date, with clock typography.
+     * Do not distribute the date and weather across a weighted header region.
+     * Keep the top buttons separate when the display is too narrow for one row.
+     */
+    /** ROWA_UI_V9: keep one header row, match weather glyph and temperature typography
+     * to the clock, and keep the unchanged two-line date entirely inside clock height.
+     * This only adjusts Home's header; it does not modify any key or service handling.
+     */
+    void rowaPolishHeader() {
+        TextView weather = findViewById(R.id.rowaWeather);
+        TextView time = findViewById(R.id.clock);
+        TextView date = findViewById(R.id.date);
+        TextView greeting = findViewById(R.id.greeting);
+        View divider = findViewById(R.id.clockDivider);
+        View left = findViewById(R.id.leftBlock);
+        View bar = findViewById(R.id.topButtons);
+        if (weather == null || time == null || date == null || greeting == null
+                || divider == null || left == null || bar == null) return;
+        RowaWeatherVisuals.matchTemperatureHeight(this, weather, time);
+        if (RowaResponsiveWeather.update(this, weather, time, date, divider, left)) return;
+        if (!(weather.getParent() instanceof LinearLayout)
+                || !(date.getParent() instanceof LinearLayout)) return;
+        LinearLayout trailing = (LinearLayout) weather.getParent();
+        LinearLayout dateColumn = (LinearLayout) date.getParent();
+        if (dateColumn.getParent() != trailing || divider.getParent() != trailing
+                || !(trailing.getParent() instanceof LinearLayout)) return;
+        LinearLayout clockRow = (LinearLayout) trailing.getParent();
+
+        // Use exactly the clock's font object and clock's measured text size.
+        // Weather's Small/Large setting is a multiplier, not a separate base size.
+        weather.setTypeface(time.getTypeface());
+        weather.setTextColor(time.getCurrentTextColor());
+        weather.setTextScaleX(time.getTextScaleX());
+        weather.setLetterSpacing(time.getLetterSpacing());
+        weather.setIncludeFontPadding(time.getIncludeFontPadding());
+        weather.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,
+                52f * getResources().getDisplayMetrics().scaledDensity
+                        * RowaAppearance.scale(this, "weather"));
+        weather.setSingleLine(true);
+        weather.setBackground(null);
+        weather.setPadding(0, 0, 0, 0);
+        weather.setGravity(Gravity.CENTER_VERTICAL);
+
+        // Date: font family and both date lines stay completely untouched.
+        // Only the text size follows the greeting above the clock.
+        date.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, greeting.getTextSize());
+        date.setMaxWidth(Math.round(155f * density));
+        // Do not change date's singleLine/maxLines/format/text/lineSpacing/typeface.
+        date.setEllipsize(null); // Free the existing second date line from "K...".
+
+        // The old width=0, weight=1 rules stretched the gap before the weather.
+        LinearLayout.LayoutParams trailingLp = (LinearLayout.LayoutParams) trailing.getLayoutParams();
+        if (trailingLp.width != ViewGroup.LayoutParams.WRAP_CONTENT || trailingLp.weight != 0f) {
+            trailingLp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            trailingLp.weight = 0f;
+            trailing.setLayoutParams(trailingLp);
+        }
+        LinearLayout.LayoutParams dateLp = (LinearLayout.LayoutParams) dateColumn.getLayoutParams();
+        if (dateLp.width != ViewGroup.LayoutParams.WRAP_CONTENT || dateLp.weight != 0f) {
+            dateLp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            dateLp.weight = 0f;
+            dateColumn.setLayoutParams(dateLp);
+        }
+        ViewGroup.LayoutParams dateTextLp = date.getLayoutParams();
+        if (dateTextLp.width != ViewGroup.LayoutParams.WRAP_CONTENT) {
+            dateTextLp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            date.setLayoutParams(dateTextLp);
+        }
+        // A full-size weather item and the smaller two-line date are centred
+        // within the clock's text row. The date no longer protrudes above/below.
+        clockRow.setGravity(Gravity.CENTER_VERTICAL);
+        trailing.setGravity(Gravity.CENTER_VERTICAL);
+        dateColumn.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams weatherLp = (LinearLayout.LayoutParams) weather.getLayoutParams();
+        if (weatherLp.topMargin != 0 || weatherLp.bottomMargin != 0
+                || weatherLp.leftMargin != 0 || weatherLp.rightMargin != 0) {
+            weatherLp.setMargins(0, 0, 0, 0);
+            weather.setLayoutParams(weatherLp);
+        }
+        LinearLayout.LayoutParams dividerLp = (LinearLayout.LayoutParams) divider.getLayoutParams();
+        int dividerWidth = Math.max(1, Math.round(density));
+        int dividerHeight = Math.round(27f * density);
+        int dividerGap = Math.round(8f * density);
+        if (dividerLp.width != dividerWidth || dividerLp.height != dividerHeight
+                || dividerLp.leftMargin != dividerGap || dividerLp.rightMargin != dividerGap
+                || dividerLp.topMargin != 0 || dividerLp.bottomMargin != 0) {
+            dividerLp.width = dividerWidth;
+            dividerLp.height = dividerHeight;
+            dividerLp.setMargins(dividerGap, 0, dividerGap, 0);
+            divider.setLayoutParams(dividerLp);
+        }
+        divider.setVisibility(weather.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
+
+        // v7/v8 moved the whole buttons group below the header on tight screens.
+        // Never do that: restore the original, shared top header row every time.
+        if (bar.getParent() instanceof RelativeLayout
+                && left.getLayoutParams() instanceof RelativeLayout.LayoutParams) {
+            RelativeLayout.LayoutParams leftLp = (RelativeLayout.LayoutParams) left.getLayoutParams();
+            if (leftLp.getRule(RelativeLayout.START_OF) != R.id.topButtons) {
+                leftLp.addRule(RelativeLayout.START_OF, R.id.topButtons);
+                left.setLayoutParams(leftLp);
+            }
+            RelativeLayout.LayoutParams barLp = (RelativeLayout.LayoutParams) bar.getLayoutParams();
+            boolean moved = barLp.getRule(RelativeLayout.BELOW) != 0
+                    || barLp.getRule(RelativeLayout.ALIGN_BOTTOM) != 0
+                    || barLp.getRule(RelativeLayout.ALIGN_TOP) != R.id.leftBlock;
+            if (moved) {
+                barLp.removeRule(RelativeLayout.BELOW);
+                barLp.removeRule(RelativeLayout.ALIGN_BOTTOM);
+                barLp.addRule(RelativeLayout.ALIGN_TOP, R.id.leftBlock);
+                barLp.topMargin = Math.round(21f * density);
+                bar.setLayoutParams(barLp);
+            }
+        }
+
+        // Position top buttons at the vertical centre of the clock, not below it.
+        // The 1-pixel guard prevents a layout-invalidation loop on inexpensive TVs.
+        clockRow.post(() -> {
+            if (!bar.isAttachedToWindow() || time.getHeight() == 0 || bar.getHeight() == 0) return;
+            RelativeLayout.LayoutParams barLp = (RelativeLayout.LayoutParams) bar.getLayoutParams();
+            int wanted = Math.max(0, clockRow.getTop()
+                    + (time.getHeight() - bar.getHeight()) / 2);
+            if (Math.abs(barLp.topMargin - wanted) > 1) {
+                barLp.topMargin = wanted;
+                bar.setLayoutParams(barLp);
+            }
+            // Make the weather baseline agree with the clock even when an emoji
+            // is rendered by a fallback font. Reset translation before measuring,
+            // otherwise repeated weather/network refreshes accumulate offsets.
+            weather.setTranslationY(0f);
+            if (weather.getVisibility() != View.VISIBLE || time.getBaseline() < 0
+                    || weather.getBaseline() < 0) return;
+            int[] txy = new int[2], wxy = new int[2];
+            time.getLocationInWindow(txy);
+            weather.getLocationInWindow(wxy);
+            float correction = (txy[1] + time.getBaseline())
+                    - (wxy[1] + weather.getBaseline());
+            if (Math.abs(correction) > 0.5f && Math.abs(correction) < 55f * density)
+                weather.setTranslationY(correction);
+        });
+    }
+
     private void showSettingsMenu() {
         View anchor = findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
         PopupWindow popup = glassPopup(panel, (int) (200 * density));
+        addSettingsMenuRow(rows, popup, R.string.rowa_appearance,
+                () -> root.post(this::rowaShowAppearanceMenu));
         if (!launcherSettingsButton) addSettingsMenuRow(rows, popup, R.string.launcher_settings, () -> startActivityForResult(
                 new Intent(this, LauncherSettingsActivity.class), LAUNCHER_SETTINGS_REQUEST));
         // Firmware that ships its own settings app next to the AOSP one (Xiaomi China is one): the
@@ -3473,21 +4393,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (moduleCards) addSettingsMenuRow(rows, popup, R.string.module_cards, this::showModuleCards);
         if (dockRow) addSettingsMenuRow(rows, popup, R.string.dock_edit, this::startDockEdit);
         addSettingsMenuRow(rows, popup, R.string.reorder, this::toggleReorder);
-        // A launcher may not restart the TV itself; the Home key helper can open the system power menu instead.
-        if (HomeKeyService.canOpenPowerMenu()) addSettingsMenuRow(rows, popup, R.string.power_menu, HomeKeyService::openPowerMenu);
+        addSettingsMenuRow(rows, popup, R.string.app_appearance_edit,
+                () -> startActivity(new Intent(this, AppAppearanceActivity.class)));
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.max((int) (200 * density), panel.getMeasuredWidth()));
         // Hebrew puts Settings at the left of the header: grow the menu inward from it.
         dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
                 ? Gravity.START : Gravity.END);
         rows.getChildAt(0).requestFocus();
-    }
-
-    /** A tile configured with launch_actions "input:<id>" (config.xml): switch to that TV input directly,
-     *  the same path the Inputs menu's own rows use, instead of opening the input's owning app normally. */
-    @Override
-    public void onOpenInput(String inputId) {
-        openInput(inputId);
     }
 
     /**
@@ -3571,6 +4484,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
             return true;
         });
+        RowaMenuMarquee.bind(row, (TextView) row.findViewById(R.id.title));
         rows.addView(row);
     }
 
@@ -3594,8 +4508,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (card == null) return;
 
         View panel = getLayoutInflater().inflate(R.layout.dialog_card_prompt, root, false);
-        boolean rtl = getResources().getBoolean(R.bool.rtl_menu_bar);
-        if (rtl) panel.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         ((TextView) panel.findViewById(R.id.title)).setText(getString(R.string.card_prompt_title, card.appLabel));
         ((TextView) panel.findViewById(R.id.body)).setText(card.state == Cards.State.RESIGNED
                 ? getString(R.string.card_prompt_resigned, card.appLabel)
@@ -3609,16 +4521,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 getString(R.string.card_prompt_identity, card.pkg, Cards.shortDigest(card.digest)));
         TextView keep = panel.findViewById(R.id.btnKeep);
         TextView show = panel.findViewById(R.id.btnShow);
-        if (rtl) {
-            LinearLayout buttons = (LinearLayout) keep.getParent();
-            buttons.removeAllViews();
-            buttons.addView(show);
-            buttons.addView(keep);
-            keep.setNextFocusLeftId(R.id.btnShow);
-            keep.setNextFocusRightId(R.id.btnKeep);
-            show.setNextFocusLeftId(R.id.btnShow);
-            show.setNextFocusRightId(R.id.btnKeep);
-        }
 
         final Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -3650,10 +4552,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View.OnKeyListener keys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT)
-                return v.getId() == (rtl ? R.id.btnShow : R.id.btnKeep);
-            return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-                    && v.getId() == (rtl ? R.id.btnKeep : R.id.btnShow);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return v.getId() == R.id.btnKeep;
+            return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == R.id.btnShow;
         };
         keep.setOnKeyListener(keys);
         show.setOnKeyListener(keys);
@@ -3687,8 +4587,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void showModuleCardsNow() {
         View anchor = findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
-        if (getResources().getBoolean(R.bool.rtl_menu_bar))
-            panel.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         LinearLayout rows = panel.findViewById(R.id.rows);
         final PopupWindow popup = glassPopup(panel, (int) (400 * density));
         List<Cards.Card> listed = new ArrayList<>(cards);
@@ -3697,12 +4595,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             View row = getLayoutInflater().inflate(R.layout.item_card_row, rows, false);
             row.setTag(card.pkg);
             ((TextView) row.findViewById(R.id.title)).setText(card.label);
-            if (getResources().getBoolean(R.bool.rtl_menu_bar)) {
-                LinearLayout heading = (LinearLayout) row.findViewById(R.id.title).getParent();
-                View status = row.findViewById(R.id.state);
-                heading.removeView(status);
-                heading.addView(status, 0);
-            }
             TextView app = row.findViewById(R.id.app);
             if (Cards.fold(card.label).equals(Cards.fold(card.appLabel))) app.setVisibility(View.GONE);
             else app.setText(getString(R.string.card_app_name, card.appLabel));

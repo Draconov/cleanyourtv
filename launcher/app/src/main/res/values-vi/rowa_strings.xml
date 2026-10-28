@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Quản lý tất cả ứng dụng</string>
+    <string name="rowa_open_app_settings">Mở cài đặt ứng dụng</string>
+    <string name="rowa_usage_access_recent">Quyền truy cập dữ liệu sử dụng</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Không mở được cài đặt Bluetooth; vào Điều khiển từ xa và phụ kiện</string>
+</resources>

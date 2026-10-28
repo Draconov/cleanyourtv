@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rowa_manage_all_apps">Hantera alla appar</string>
+    <string name="rowa_open_app_settings">Öppna appinställningar</string>
+    <string name="rowa_usage_access_recent">Åtkomst till användningsdata</string>
+    <string name="rowa_bt_name">Bluetooth</string>
+    <string name="rowa_bt_unavailable">Bluetooth-inställningar är inte tillgängliga; öppna Fjärrkontroller och tillbehör</string>
+</resources>

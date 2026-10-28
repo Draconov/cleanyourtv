@@ -1,7 +1,6 @@
 package com.gathin.tvhome;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -10,8 +9,8 @@ import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
-import android.widget.TextView;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
@@ -21,11 +20,6 @@ import java.util.List;
 
 /** Remote-friendly settings owned by the launcher; system settings stay one row away. */
 public final class LauncherSettingsActivity extends Activity {
-    @Override
-    protected void attachBaseContext(android.content.Context base) {
-        super.attachBaseContext(LauncherLocale.wrap(base));   // locale
-    }
-
     static final String EXTRA_REORDER = "com.gathin.tvhome.extra.REORDER_FROM_SETTINGS";
     private SharedPreferences choices;
     private final TextView[] columnChoices = new TextView[4];
@@ -47,6 +41,17 @@ public final class LauncherSettingsActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         setContentView(R.layout.activity_launcher_settings);
+        // Keep the same floating glass-panel proportions as the launcher dropdowns,
+        // constrained to the current display rather than a fixed TV resolution.
+        View panel = findViewById(R.id.rowaSettingsPanel);
+        android.widget.FrameLayout.LayoutParams frame =
+                (android.widget.FrameLayout.LayoutParams) panel.getLayoutParams();
+        float d = getResources().getDisplayMetrics().density;
+        frame.width = Math.min(Math.round(620 * d),
+                getResources().getDisplayMetrics().widthPixels - Math.round(42 * d));
+        frame.height = getResources().getDisplayMetrics().heightPixels - Math.round(36 * d);
+        panel.setLayoutParams(frame);
+        panel.getBackground().mutate().setAlpha(RowaVisualOptions.panelAlpha(this));
         choices = getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE);
         Config config = Config.load(this);
         View reorderChoice = findViewById(R.id.reorderChoice);
@@ -55,6 +60,8 @@ public final class LauncherSettingsActivity extends Activity {
             setResult(RESULT_OK, new Intent().putExtra(EXTRA_REORDER, true));
             finish();
         });
+        findViewById(R.id.appAppearanceChoice).setOnClickListener(v ->
+                startActivity(new Intent(this, AppAppearanceActivity.class)));
         columns = config.columns;
         rowsBelowDock = config.rowsBelowDock;
         dockOpacity = config.dockOpacity;
@@ -97,10 +104,8 @@ public final class LauncherSettingsActivity extends Activity {
                 refresh();
             });
         }
-        // Mirror text alignment without globally opting the launcher into RTL. Numeric rows
-        // still need explicit ordering in Android's no-supportsRtl compatibility mode.
-        if (getResources().getBoolean(R.bool.rtl_menu_bar))
-            findViewById(android.R.id.content).setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        // Keep the numeric choices increasing in the Hebrew reading direction. Reorder the
+        // actual views so D-pad focus follows their positions without changing the saved values.
         if (getResources().getBoolean(R.bool.rtl_app_grid)) {
             reverseRow(columnChoices);
             reverseRow(rowChoices);
@@ -108,6 +113,7 @@ public final class LauncherSettingsActivity extends Activity {
         }
         wallpaperChoice = findViewById(R.id.wallpaperChoice);
         wallpaperChoice.setOnClickListener(v -> showWallpaperPicker());
+        RowaMenuMarquee.bind(wallpaperChoice, wallpaperChoice);
         animationsChoice = findViewById(R.id.animationsChoice);
         animationsChoice.setOnClickListener(v -> {
             animations = !animations;
@@ -122,15 +128,12 @@ public final class LauncherSettingsActivity extends Activity {
             if (advancedEffects) {
                 setAdvanced(false);
             } else {
-                new AlertDialog.Builder(this)
-                        .setTitle(R.string.advanced_effects)
-                        .setMessage(R.string.advanced_effects_warning)
-                        .setPositiveButton(R.string.enable, (dialog, which) -> setAdvanced(true))
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .show();
+                RowaGlassDialog.confirm(this, getString(R.string.advanced_effects),
+                        getString(R.string.advanced_effects_warning), () -> setAdvanced(true));
             }
         });
         openOnStartChoice = findViewById(R.id.openOnStartChoice);
+        RowaMenuMarquee.bind(openOnStartChoice, openOnStartChoice);
         if (config.openOnStartChoice) {
             openOnStartChoice.setVisibility(View.VISIBLE);
             openOnStartChoice.setOnClickListener(v -> showOpenOnStartPicker());
@@ -180,10 +183,8 @@ public final class LauncherSettingsActivity extends Activity {
         String current = choices.getString(Config.WALLPAPER_CHOICE_KEY, null);
         int checked = "none".equals(current) ? images.size()
                 : indexOf(images, current);
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.wallpaper_label)
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    dialog.dismiss();
+        RowaGlassDialog.choices(this, getString(R.string.wallpaper_label), labels, checked,
+                which -> {
                     if (which == images.size()) {
                         choices.edit().putString(Config.WALLPAPER_CHOICE_KEY, "none").apply();
                     } else {
@@ -193,14 +194,11 @@ public final class LauncherSettingsActivity extends Activity {
                     changed();
                     Toast.makeText(this, R.string.wallpaper_applied, Toast.LENGTH_SHORT).show();
                     refresh();
-                })
-                .setNeutralButton(R.string.wallpaper_theme_default, (dialog, which) -> {
+                }, getString(R.string.wallpaper_theme_default), () -> {
                     choices.edit().remove(Config.WALLPAPER_CHOICE_KEY).apply();
                     changed();
                     refresh();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                });
     }
 
     /** Off, then every app with a TV entry point by name. Saved at once; it is read on the next boot. */
@@ -224,19 +222,15 @@ public final class LauncherSettingsActivity extends Activity {
             labels[i + 1] = apps.get(i)[0];
             if (apps.get(i)[1].equals(current)) checked = i + 1;
         }
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.open_on_start_label)
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    dialog.dismiss();
+        RowaGlassDialog.choices(this, getString(R.string.open_on_start_label), labels, checked,
+                which -> {
                     if (which == 0) choices.edit().remove(OpenOnStart.KEY).apply();
                     else {
                         OpenOnStart.skipThisBoot(this);
                         choices.edit().putString(OpenOnStart.KEY, apps.get(which - 1)[1]).apply();
                     }
                     refresh();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                }, null, null);
     }
 
     /** The picked app's name, its package when it is gone, or Off. */
