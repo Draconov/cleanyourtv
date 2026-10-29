@@ -143,34 +143,67 @@ final class RowaWallpaperRenderer {
         } finally { if (tiny != source) tiny.recycle(); }
     }
 
-    /** Separable box blur over only 3,600 pixels; 2 passes avoid blocking the preview. */
+    /**
+     * Two-pass box blur of an 80x45 backdrop. Sliding sums perform a constant
+     * number of operations per pixel rather than rescanning each radius-wide
+     * neighborhood (up to 61 samples) for every output pixel. The neighborhoods
+     * and integer rounding match the original clipped-edge implementation.
+     */
     private static void blurTiny(Bitmap b, int radius) {
         int w = b.getWidth(), h = b.getHeight();
         int[] pixels = new int[w * h], next = new int[pixels.length];
         b.getPixels(pixels, 0, w, 0, 0, w, h);
         for (int pass = 0; pass < 2; ++pass) {
-            // Use explicit clipped neighborhoods, bounded to 30*3600*4 operations.
             for (int y = 0; y < h; ++y) {
+                int row = y * w, r = 0, g = 0, blue = 0, count = 0;
+                for (int i = 0; i <= Math.min(w - 1, radius); ++i) {
+                    int color = pixels[row + i];
+                    r += Color.red(color); g += Color.green(color); blue += Color.blue(color);
+                    ++count;
+                }
                 for (int x = 0; x < w; ++x) {
-                    int r = 0, g = 0, bl = 0, n = 0;
-                    for (int t = Math.max(0, x - radius); t <= Math.min(w - 1, x + radius); ++t) {
-                        int color = pixels[y * w + t];
-                        r += Color.red(color); g += Color.green(color); bl += Color.blue(color); ++n;
+                    next[row + x] = Color.rgb(r / count, g / count, blue / count);
+                    int leaving = x - radius;
+                    if (leaving >= 0) {
+                        int color = pixels[row + leaving];
+                        r -= Color.red(color); g -= Color.green(color); blue -= Color.blue(color);
+                        --count;
                     }
-                    next[y * w + x] = Color.rgb(r / n, g / n, bl / n);
+                    int entering = x + radius + 1;
+                    if (entering < w) {
+                        int color = pixels[row + entering];
+                        r += Color.red(color); g += Color.green(color); blue += Color.blue(color);
+                        ++count;
+                    }
                 }
             }
             int[] swap = pixels; pixels = next; next = swap;
-            for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
-                int r = 0, g = 0, bl = 0, n = 0;
-                for (int t = Math.max(0, y - radius); t <= Math.min(h - 1, y + radius); ++t) {
-                    int color = pixels[t * w + x];
-                    r += Color.red(color); g += Color.green(color); bl += Color.blue(color); ++n;
+            for (int x = 0; x < w; ++x) {
+                int r = 0, g = 0, blue = 0, count = 0;
+                for (int i = 0; i <= Math.min(h - 1, radius); ++i) {
+                    int color = pixels[i * w + x];
+                    r += Color.red(color); g += Color.green(color); blue += Color.blue(color);
+                    ++count;
                 }
-                next[y * w + x] = Color.rgb(r / n, g / n, bl / n);
+                for (int y = 0; y < h; ++y) {
+                    next[y * w + x] = Color.rgb(r / count, g / count, blue / count);
+                    int leaving = y - radius;
+                    if (leaving >= 0) {
+                        int color = pixels[leaving * w + x];
+                        r -= Color.red(color); g -= Color.green(color); blue -= Color.blue(color);
+                        --count;
+                    }
+                    int entering = y + radius + 1;
+                    if (entering < h) {
+                        int color = pixels[entering * w + x];
+                        r += Color.red(color); g += Color.green(color); blue += Color.blue(color);
+                        ++count;
+                    }
+                }
             }
             swap = pixels; pixels = next; next = swap;
         }
         b.setPixels(pixels, 0, w, 0, 0, w, h);
     }
+
 }

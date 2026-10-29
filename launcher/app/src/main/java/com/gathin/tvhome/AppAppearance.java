@@ -11,6 +11,7 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.text.TextUtils;
+import android.util.LruCache;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -24,6 +25,32 @@ final class AppAppearance {
     private static final String FILE = "file";
     private static final String PACKAGE = "package:";
     static final int MAX_EDGE = 512;
+    // App tiles can be rebound when settings or installed packages change. Keep only
+    // a few small decoded custom icons rather than re-reading PNGs on the UI thread.
+    // Cache units are KiB; no bitmap is forcibly recycled while a tile may display it.
+    private static final LruCache<String, CachedImage> IMAGE_CACHE =
+            new LruCache<String, CachedImage>(3 * 1024) {
+                @Override protected int sizeOf(String key, CachedImage image) {
+                    return Math.max(1, (image.bitmap.getByteCount() + 1023) / 1024);
+                }
+            };
+
+    private static final class CachedImage {
+        final Bitmap bitmap;
+        final long modified, length;
+        CachedImage(Bitmap bitmap, File file) {
+            this.bitmap = bitmap;
+            modified = file.lastModified();
+            length = file.length();
+        }
+        boolean matches(File file) {
+            return !bitmap.isRecycled() && modified == file.lastModified() && length == file.length();
+        }
+    }
+
+    static void trimArtworkCache() {
+        IMAGE_CACHE.evictAll();
+    }
 
     private AppAppearance() { }
 
@@ -59,10 +86,34 @@ final class AppAppearance {
         if (FILE.equals(source)) {
             File file = imageFile(ctx, pkg);
             if (!file.isFile()) return null;
-            Bitmap bmp = BitmapFactory.decodeFile(file.getAbsolutePath());
-            if (bmp == null) return null;
-            return new Artwork(new BitmapDrawable(ctx.getResources(), bmp),
-                    bmp.getWidth() > bmp.getHeight() * 1.35f);
+            try {
+                CachedImage cached = IMAGE_CACHE.get(pkg);
+                Bitmap bmp = cached != null && cached.matches(file) ? cached.bitmap : null;
+                if (bmp == null) {
+                    // Images saved through the editor are at most 512px. Bound older or
+                    // manually copied files too, avoiding an accidental full-size decode.
+                    BitmapFactory.Options bounds = new BitmapFactory.Options();
+                    bounds.inJustDecodeBounds = true;
+                    BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0
+                            || bounds.outWidth > 12000 || bounds.outHeight > 12000) return null;
+                    int sample = 1;
+                    while (bounds.outWidth / sample > MAX_EDGE || bounds.outHeight / sample > MAX_EDGE)
+                        sample <<= 1;
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inSampleSize = sample;
+                    options.inPreferredConfig = Bitmap.Config.ARGB_8888; // Keep PNG transparency.
+                    options.inScaled = false;
+                    bmp = BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+                    if (bmp == null) return null;
+                    IMAGE_CACHE.put(pkg, new CachedImage(bmp, file));
+                }
+                return new Artwork(new BitmapDrawable(ctx.getResources(), bmp),
+                        bmp.getWidth() > bmp.getHeight() * 1.35f);
+            } catch (RuntimeException | OutOfMemoryError unavailable) {
+                // An invalid or oversized artwork file must not prevent Home loading.
+                return null;
+            }
         }
         if (source.startsWith(PACKAGE)) {
             String other = source.substring(PACKAGE.length());
@@ -104,6 +155,7 @@ final class AppAppearance {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString(ART + pkg, PACKAGE + sourcePkg).apply();
         imageFile(ctx, pkg).delete();
+        IMAGE_CACHE.remove(pkg);
         changed(ctx);
     }
 
@@ -144,6 +196,7 @@ final class AppAppearance {
             if (dest.exists() && !dest.delete()) return false;
             if (!temp.renameTo(dest)) return false;
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(ART + pkg, FILE).apply();
+            IMAGE_CACHE.remove(pkg);
             changed(ctx);
             return true;
         } catch (Exception | OutOfMemoryError ex) {
@@ -163,6 +216,7 @@ final class AppAppearance {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .remove(NAME + pkg).remove(ART + pkg).apply();
         imageFile(ctx, pkg).delete();
+        IMAGE_CACHE.remove(pkg);
         changed(ctx);
     }
 

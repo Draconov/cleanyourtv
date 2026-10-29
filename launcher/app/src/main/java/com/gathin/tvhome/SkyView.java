@@ -54,7 +54,9 @@ public class SkyView extends View {
         intensity = Math.max(0, Math.min(100, percent));
         setAlpha(intensity / 100f);
         setVisibility(intensity == 0 ? GONE : VISIBLE);
-        if (intensity > 0) render(true);
+        // Changing opacity does not change the sky texture; recompute only if
+        // this is the first draw or the clock minute actually changed.
+        if (intensity > 0) render(false);
     }
 
     /** Picks up a new time of day; cheap and safe to call every minute. */
@@ -66,7 +68,7 @@ public class SkyView extends View {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        if (intensity > 0) render(true);
+        if (intensity > 0) render(false);
     }
 
     /** Today's sunrise and sunset at the configured place, or null without one (fixed reference day). */

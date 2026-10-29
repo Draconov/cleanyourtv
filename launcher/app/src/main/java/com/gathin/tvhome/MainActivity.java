@@ -1246,6 +1246,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.getRecycledViewPool().clear();
         heroArtCache.clear();
         heroArtKey = null;
+        AppAppearance.trimArtworkCache();
         wallpaperPlayer.releaseForMemoryPressure();
         tileRefresh.invalidate();
     }
@@ -2522,7 +2523,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private void updateClockVisibility() {
         boolean valid = System.currentTimeMillis() >= TIME_VALID_AFTER_MS;
-        clockBlock.setVisibility(valid ? View.VISIBLE : View.INVISIBLE);
+        int visibility = valid ? View.VISIBLE : View.INVISIBLE;
+        if (clockBlock.getVisibility() != visibility) clockBlock.setVisibility(visibility);
         handler.removeCallbacks(clockCheck);
         if (valid) {
             updateGreeting();

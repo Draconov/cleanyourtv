@@ -60,6 +60,10 @@ public class GlassView extends View {
 
     /** Tints the rim and the outer glow; 0 restores the plain white glass. */
     void setAccent(int argb) {
+        int nextRgb = argb == 0 ? 0xFFFFFF : argb & 0xFFFFFF;
+        int nextAlpha = argb == 0 ? 0x30 : 0x70;
+        // Restoring focus to the same tile should not redraw its hardware layer.
+        if (glowRgb == nextRgb && glowAlpha == nextAlpha) return;
         if (argb == 0) {
             glowRgb = 0xFFFFFF;
             glowAlpha = 0x30;
@@ -77,8 +81,11 @@ public class GlassView extends View {
 
     /** One of Config's GLASS_* styles. */
     void setStyle(String style) {
-        flat = Config.GLASS_RIM.equals(style) || Config.GLASS_HALO.equals(style);
-        halo = Config.GLASS_HALO.equals(style);
+        boolean nextFlat = Config.GLASS_RIM.equals(style) || Config.GLASS_HALO.equals(style);
+        boolean nextHalo = Config.GLASS_HALO.equals(style);
+        if (flat == nextFlat && halo == nextHalo) return;
+        flat = nextFlat;
+        halo = nextHalo;
         rowaUpdateRimWidth();
         invalidate();
     }
