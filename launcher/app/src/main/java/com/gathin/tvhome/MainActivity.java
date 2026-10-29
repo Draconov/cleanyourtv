@@ -656,6 +656,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
+        if (!verticalRail) {
+            // ROWA: draw the same darkened wallpaper treatment underneath tiles in
+            // one-row, grid, and theme/default modes. Keep it inside RecyclerView so
+            // it follows the cards during scrolling without a full-screen layer.
+            // Vertical mode already uses RowaVerticalRailView for this purpose.
+            grid.addItemDecoration(new RowaCardBackdropDecoration(density, singleRow));
+        }
         if (verticalRail) {
             // A narrow gap separates the first COLUMNS saved dock positions from the other apps.
             grid.addItemDecoration(new RecyclerView.ItemDecoration() {
