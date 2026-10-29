@@ -68,7 +68,7 @@ public final class RowaDownloadsBrowserActivity extends Activity {
     private static final long PREVIEW_DWELL_MS = 450L;
     private static final int MAX_VISIBLE = 400;
     private static final int MAX_FOLDERS = 200;
-    private static final int THUMB_KIB = 6 * 1024;
+    private static final int THUMB_KIB = 3 * 1024;
 
     private final ArrayList<Photo> photos = new ArrayList<>();
     private final ArrayList<Folder> folders = new ArrayList<>();

@@ -54,9 +54,9 @@ public class SkyView extends View {
         intensity = Math.max(0, Math.min(100, percent));
         setAlpha(intensity / 100f);
         setVisibility(intensity == 0 ? GONE : VISIBLE);
-        // Changing opacity does not change the sky texture; recompute only if
-        // this is the first draw or the clock minute actually changed.
-        if (intensity > 0) render(false);
+        // An invisible sky needs no native bitmap or GPU texture at all.
+        if (intensity == 0) releaseTexture();
+        else render(false);
     }
 
     /** Picks up a new time of day; cheap and safe to call every minute. */
@@ -69,6 +69,20 @@ public class SkyView extends View {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (intensity > 0) render(false);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        releaseTexture();
+        super.onDetachedFromWindow();
+    }
+
+    /** Let Android reclaim the sky bitmap/texture while Home is fully hidden. */
+    void releaseTexture() {
+        setBackground(null);
+        drawable = null;
+        texture = null; // do not recycle: RenderThread may still use the previous frame
+        lastMinute = -1;
     }
 
     /** Today's sunrise and sunset at the configured place, or null without one (fixed reference day). */

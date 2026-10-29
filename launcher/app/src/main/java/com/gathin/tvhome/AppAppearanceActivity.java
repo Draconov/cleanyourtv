@@ -310,6 +310,10 @@ public final class AppAppearanceActivity extends Activity {
     }
 
     private void showEditor() {
+        // The photo picker is closed: cached thumbnails should not stay in RAM
+        // while editing names or copying another installed application's icon.
+        ++selectionGeneration;
+        thumbnails.evictAll();
         editorPane.setVisibility(View.VISIBLE);
         choiceList.setVisibility(View.GONE);
         choiceTitle.setVisibility(View.GONE);
@@ -560,7 +564,8 @@ public final class AppAppearanceActivity extends Activity {
                 final int generation = selectionGeneration;
                 decoder.execute(() -> {
                     Bitmap bmp = readThumb(photo);
-                    if (bmp != null) thumbnails.put(photo.id, bmp);
+                    if (bmp != null && generation == selectionGeneration && !decoder.isShutdown())
+                        thumbnails.put(photo.id, bmp);
                     icon.post(() -> {
                         if (generation == selectionGeneration && photo.id == (long) icon.getTag() && bmp != null)
                             icon.setImageBitmap(bmp);
@@ -574,6 +579,12 @@ public final class AppAppearanceActivity extends Activity {
     @Override protected void onDestroy() {
         ++selectionGeneration;
         decoder.shutdownNow();
+        if (previewIcon != null) previewIcon.setImageDrawable(null);
+        if (choiceList != null) choiceList.setAdapter(null);
+        if (appList != null) appList.setAdapter(null);
+        thumbnails.evictAll();
+        photos.clear();
+        sourceSelection.clear();
         super.onDestroy();
     }
 }

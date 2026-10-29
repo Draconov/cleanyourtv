@@ -291,6 +291,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean started;
     /** Rebuild the tiles on the way back to Home only when apps changed meanwhile (TileRefresh). */
     private final TileRefresh tileRefresh = new TileRefresh();
+    /** Never release Home resources on a quick app switch or a translucent overlay. */
+    private static final long BACKGROUND_RELEASE_DELAY_MS = 45_000L;
+    private final Runnable releaseHiddenArtwork = () -> {
+        if (started || !stopped || isFinishing() || isDestroyed()) return;
+        releaseHiddenResources();
+    };
+
     /** PackageManager's change counter at the last rebuild, to catch a package broadcast that never arrived. */
     private int packageSequence;
     /** The Inputs or Module cards dropdown while one is open, so onPause can close it. */
@@ -957,6 +964,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onStart() {
         super.onStart();
+        handler.removeCallbacks(releaseHiddenArtwork);
         stopped = false;
         started = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -1226,6 +1234,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         handler.removeCallbacks(clockCheck);
         stopped = true;
         tileRefresh.onStop();
+        handler.removeCallbacks(releaseHiddenArtwork);
+        handler.postDelayed(releaseHiddenArtwork, BACKGROUND_RELEASE_DELAY_MS);
+    }
+
+    /** Remove heavy Home resources only while truly hidden; the next resume rebuilds tiles and wallpaper. */
+    private void releaseHiddenResources() {
+        if (started || !stopped || grid.getAdapter() == null) return;
+        heroArt.animate().cancel();
+        heroArt.setImageDrawable(null); // releasing the cache alone leaves a bitmap held by this view
+        heroArtCache.clear();
+        heroArtKey = null;
+        adapter.clear();
+        grid.setAdapter(null);
+        grid.getRecycledViewPool().clear();
+        AppAppearance.trimArtworkCache();
+        wallpaperPlayer.releaseForMemoryPressure();
+        sky.releaseTexture();
+        tileRefresh.invalidate();
     }
 
     /**
@@ -1239,16 +1265,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // RUNNING_LOW and CRITICAL also arrive while Home is visible when an accessibility service keeps the
         // process in the foreground; never blank the screen the owner is looking at.
         if (!MemoryTrimPolicy.shouldRelease(level, started)) return;
-        adapter.clear();
-        // Detach the adapter too: with Home stopped no layout pass runs, so the tile views (and the bitmaps
-        // they hold) would stay attached until Home comes back. setAdapter(null) recycles them now.
-        grid.setAdapter(null);
-        grid.getRecycledViewPool().clear();
-        heroArtCache.clear();
-        heroArtKey = null;
-        AppAppearance.trimArtworkCache();
-        wallpaperPlayer.releaseForMemoryPressure();
-        tileRefresh.invalidate();
+        handler.removeCallbacks(releaseHiddenArtwork);
+        releaseHiddenResources();
     }
 
     @Override
@@ -1263,6 +1281,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     protected void onDestroy() {
+        handler.removeCallbacks(releaseHiddenArtwork);
         super.onDestroy();
         unregisterReceiver(packageReceiver);
         wallpaperPlayer.close();

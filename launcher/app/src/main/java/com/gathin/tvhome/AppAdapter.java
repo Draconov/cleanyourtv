@@ -10,6 +10,9 @@ import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
+import android.util.TypedValue;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.PixelFormat;
@@ -70,8 +73,12 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         final String label;
         final ComponentName component;
         final String pkg;
-        final Drawable banner;
-        final Drawable icon;
+        Drawable banner;
+        Drawable icon;
+        ResolveInfo source;
+        String configuredBanner;
+        boolean artworkLoaded = true;
+        final int originalAmbient;
         /** Text under the tile when it is focused in the grid: the label, plus the caption for a card. */
         final String name;
         /** Ambient glow colour; 0 until sampled from the banner, or the card's accent from the start. */
@@ -92,6 +99,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             this.icon = icon;
             this.name = caption == null ? label : label + " \u00B7 " + caption;
             this.ambient = accent;
+            this.originalAmbient = accent;
         }
     }
 
@@ -294,30 +302,16 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                     (appLabels.containsKey(pkg) ? appLabels.get(pkg) : String.valueOf(ri.loadLabel(pm)));
             String label = Cards.cleanLabel(AppAppearance.label(ctx, pkg, originalLabel), pkg);
             if (!seen.add(pkg + '\n' + label)) continue;
-            Drawable banner = null;
-            // uniform_tiles draws the icon, so an app's banner is never loaded. A module card keeps its banner.
-            if (!(uniformTiles && card == null)) {
-                banner = bundledBanner(appBanners.get(pkg));
-                if (banner == null) banner = loadBanner(pm, ri);
-            }
-            // The icon is only drawn (and sampled for the glow) when there is no banner, so a tile with a
-            // banner skips loading and decoding it.
-            Drawable icon = banner == null ? ri.loadIcon(pm) : null;
-            // An explicit artwork override is a TILE IMAGE, not a small Android app icon.
-            // Always use the banner ImageView (CENTER_CROP): it fills the whole 16:9 card
-            // and the banner binding below hides the duplicate in-card label.  This is
-            // identical to the behaviour of apps with native Leanback banners.
-            // Uncustomized applications retain their normal icon/banner rendering.
-            AppAppearance.Artwork customArt = AppAppearance.artwork(ctx, pkg);
-            if (customArt != null) {
-                banner = customArt.drawable;
-                icon = null;
-            }
-            if (card != null) {
-                fresh.add(new Entry(Entry.CARD, label, component, banner, icon, card.caption, card.accent));
-            } else {
-                fresh.add(new Entry(label, component, banner, icon));
-            }
+            // Keep labels, components and order in memory, but delay bitmap decoding until a
+            // RecyclerView tile is bound (visible or prefetched by RecyclerView). This avoids
+            // retaining banners for every installed app on a 1 GB TV.
+            Entry entry = card != null
+                    ? new Entry(Entry.CARD, label, component, null, null, card.caption, card.accent)
+                    : new Entry(label, component, null, null);
+            entry.source = ri;
+            entry.configuredBanner = appBanners.get(pkg);
+            entry.artworkLoaded = false;
+            fresh.add(entry);
         }
         Collections.sort(fresh, (a, b) -> {
             // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
@@ -353,6 +347,63 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         notifyDataSetChanged();
     }
 
+    /** Decode artwork for tiles RecyclerView actually displays or prefetches, never during reload(). */
+    private void ensureArtwork(Entry entry) {
+        if (entry.artworkLoaded || entry.source == null) return;
+        entry.artworkLoaded = true;
+        try {
+            PackageManager pm = ctx.getPackageManager();
+            Drawable banner = null;
+            if (!(uniformTiles && entry.kind != Entry.CARD)) {
+                banner = scaleArtwork(bundledBanner(entry.configuredBanner), true);
+                if (banner == null) banner = loadBanner(pm, entry.source);
+            }
+            Drawable icon = banner == null ? scaleArtwork(entry.source.loadIcon(pm), false) : null;
+            AppAppearance.Artwork override = AppAppearance.artwork(ctx, entry.pkg);
+            if (override != null) {
+                banner = scaleArtwork(override.drawable, true);
+                icon = null;
+            }
+            entry.banner = banner;
+            entry.icon = icon;
+        } catch (RuntimeException | OutOfMemoryError ignored) {
+            entry.banner = null;
+            entry.icon = null;
+        }
+    }
+
+    /** Drop drawable references for an offscreen recycled tile; don't recycle framework-owned bitmaps. */
+    private static void dropArtwork(Entry entry) {
+        if (entry == null || entry.source == null) return;
+        entry.banner = null;
+        entry.icon = null;
+        entry.backdrop = null;
+        entry.ambient = entry.originalAmbient;
+        entry.artworkLoaded = false;
+    }
+
+    /** Bound raster resolution to roughly twice the tile's rendered size, including focus zoom. */
+    private int targetArtworkEdge(boolean banner) {
+        float density = ctx.getResources().getDisplayMetrics().density;
+        float dp = banner ? DESIGN_W_DP : DESIGN_H_DP * ICON_SHARE;
+        return Math.max(128, Math.min(640, Math.round(dp * density * ROWA_TILE_SCALE * 2.2f)));
+    }
+
+    private Drawable scaleArtwork(Drawable drawable, boolean banner) {
+        if (!(drawable instanceof BitmapDrawable)) return drawable; // vectors and adaptive icons stay sharp
+        Bitmap bmp = ((BitmapDrawable) drawable).getBitmap();
+        if (bmp == null || bmp.isRecycled()) return drawable;
+        int max = targetArtworkEdge(banner);
+        if (bmp.getWidth() <= max && bmp.getHeight() <= max) return drawable;
+        float ratio = max / (float) Math.max(bmp.getWidth(), bmp.getHeight());
+        int w = Math.max(1, Math.round(bmp.getWidth() * ratio));
+        int h = Math.max(1, Math.round(bmp.getHeight() * ratio));
+        try {
+            // Do not recycle the original: PackageManager / Resources may own and share it.
+            return new BitmapDrawable(ctx.getResources(), Bitmap.createScaledBitmap(bmp, w, h, true));
+        } catch (RuntimeException | OutOfMemoryError ignored) { return drawable; }
+    }
+
     /** A banner_* drawable bundled with the launcher, or null for none or a name that is not one. */
     private Drawable bundledBanner(String name) {
         if (name == null || !name.startsWith("banner_")) return null;
@@ -367,14 +418,38 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         if (id != 0) {
             try {
                 Resources resources = pm.getResourcesForApplication(ri.activityInfo.applicationInfo);
-                // Keep at least xhdpi detail rather than downsampling artwork before the focus zoom.
-                int density = Math.max(DisplayMetrics.DENSITY_XHIGH, ctx.getResources().getDisplayMetrics().densityDpi);
-                banner = resources.getDrawableForDensity(id, density, null);
-            } catch (PackageManager.NameNotFoundException | Resources.NotFoundException ignored) {
+                // Sample raster resources before allocation. This avoids an oversized PNG
+                // being decoded then copied just to display a 180dp card.
+                TypedValue value = new TypedValue();
+                resources.getValue(id, value, true);
+                String path = value.string == null ? "" : value.string.toString().toLowerCase(java.util.Locale.ROOT);
+                if ((path.endsWith(".png") && !path.endsWith(".9.png"))
+                        || path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".webp")) {
+                    BitmapFactory.Options bounds = new BitmapFactory.Options();
+                    bounds.inJustDecodeBounds = true;
+                    BitmapFactory.decodeResource(resources, id, bounds);
+                    if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+                        BitmapFactory.Options opts = new BitmapFactory.Options();
+                        int max = targetArtworkEdge(true);
+                        int sample = 1;
+                        while (Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > max * 2)
+                            sample <<= 1;
+                        opts.inSampleSize = sample;
+                        opts.inScaled = false;
+                        Bitmap decoded = BitmapFactory.decodeResource(resources, id, opts);
+                        if (decoded != null) banner = new BitmapDrawable(ctx.getResources(), decoded);
+                    }
+                }
+                if (banner == null) {
+                    int density = Math.max(DisplayMetrics.DENSITY_XHIGH,
+                            ctx.getResources().getDisplayMetrics().densityDpi);
+                    banner = resources.getDrawableForDensity(id, density, null);
+                }
+            } catch (PackageManager.NameNotFoundException | RuntimeException ignored) {
             }
         }
         if (banner == null) banner = ri.activityInfo.loadBanner(pm);
-        // A square "banner" counts as none: the tile shows the app's icon and name instead of a blur.
+        banner = scaleArtwork(banner, true);
         return banner != null && isBannerShaped(banner.getIntrinsicWidth(), banner.getIntrinsicHeight()) ? banner : null;
     }
 
@@ -447,6 +522,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         if (isLibraryAt(position)) return;
         Holder h = (Holder) holder;
         Entry e = items.get(position);
+        if (h.boundEntry != e) dropArtwork(h.boundEntry);
+        h.boundEntry = e;
+        if (e.kind != Entry.EMPTY) ensureArtwork(e);
         if (e.kind == Entry.EMPTY) {
             // A free dock slot keeps its place in the row and the band, but shows nothing and takes no focus.
             h.card.setVisibility(View.INVISIBLE);
@@ -508,6 +586,20 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             }
             return true;
         });
+    }
+
+    @Override
+    public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
+        if (holder instanceof Holder) {
+            Holder tile = (Holder) holder;
+            tile.banner.setImageDrawable(null);
+            tile.icon.setImageDrawable(null);
+            tile.banner.animate().cancel();
+            tile.card.animate().cancel();
+            dropArtwork(tile.boundEntry);
+            tile.boundEntry = null;
+        }
+        super.onViewRecycled(holder);
     }
 
     /** Opens the tile's activity by explicit component, with no extras: a card can name nothing else. */
@@ -651,6 +743,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     Drawable artworkAt(int position) {
         if (position < 0 || position >= items.size()) return null;
         Entry e = items.get(position);
+        ensureArtwork(e);
         return e.banner != null ? e.banner : e.icon;
     }
 
@@ -662,6 +755,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     int ambientColorAt(int position) {
         if (position < 0 || position >= items.size()) return 0xFF444444;
         Entry e = items.get(position);
+        ensureArtwork(e);
         if (e.ambient == 0) {
             e.ambient = uniformTiles && e.banner == null ? dominantColor(e.icon) : vividColor(e.banner != null ? e.banner : e.icon);
         }
@@ -868,6 +962,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         final Drawable cardBackground;
         final ImageView banner;
         final ImageView icon;
+        Entry boundEntry;
         final TextView label;
         final TextView name;
         final boolean animations;
