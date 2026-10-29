@@ -862,6 +862,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnSettings.setOnKeyListener(pillKeys);
         btnReorder.setOnKeyListener(pillKeys);
         btnLibraryTop.setOnKeyListener(pillKeys);
+        // Stats can be relocated into the top row by rowaSetupHeader(). Include it in
+        // rail-to-pill focus navigation, otherwise LEFT on the first Stats pill escapes.
+        if (verticalRail && stats.getParent() == findViewById(R.id.topButtons))
+            stats.setOnKeyListener(pillKeys);
         for (View button : topAppButtons) button.setOnKeyListener(pillKeys);
         if (advancedEffects) {
             List<View> pills = new ArrayList<>(Arrays.asList(btnInputs, btnWifi, btnReorder, btnLibraryTop, btnSettings));
@@ -2398,10 +2402,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         left.setLayoutParams(lp);
 
         View statistics = findViewById(R.id.stats);
-        RelativeLayout.LayoutParams sp = (RelativeLayout.LayoutParams) statistics.getLayoutParams();
-        sp.removeRule(RelativeLayout.ALIGN_START);
-        sp.addRule(RelativeLayout.ALIGN_END, R.id.leftBlock);
-        statistics.setLayoutParams(sp);
+        // show_stats moves this view into the LinearLayout topButtons. Never cast its
+        // LinearLayout.LayoutParams to RelativeLayout.LayoutParams (ClassCastException).
+        if (statistics.getLayoutParams() instanceof RelativeLayout.LayoutParams) {
+            RelativeLayout.LayoutParams sp = (RelativeLayout.LayoutParams) statistics.getLayoutParams();
+            sp.removeRule(RelativeLayout.ALIGN_START);
+            sp.addRule(RelativeLayout.ALIGN_END, R.id.leftBlock);
+            statistics.setLayoutParams(sp);
+        }
         // Hero text does not overlap the top-right header even with a very long app name.
         heroName.setMaxWidth(Math.max(Math.round(220f * density),
                 screenWidth - Math.round(585f * density)));
@@ -4493,6 +4501,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             divider.setLayoutParams(dividerLp);
         }
         divider.setVisibility(weather.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
+
+        // Vertical mode deliberately places leftBlock BELOW topButtons. Keep the
+        // clock/weather typography work above, but never reapply the old horizontal
+        // RelativeLayout constraints or the delayed top-bar alignment below.
+        if (verticalRail) return;
 
         // v7/v8 moved the whole buttons group below the header on tight screens.
         // Never do that: restore the original, shared top header row every time.
