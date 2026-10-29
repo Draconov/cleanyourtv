@@ -140,4 +140,5 @@
     <string name="app_appearance_package_hint">App package name</string>
     <string name="app_appearance_invalid">Application package is not available</string>
     <string name="app_appearance_reset_confirm">Restore the original name and icon for this app?</string>
+    <string name="rowa_layout_vertical">Vertical column</string>
 </resources>

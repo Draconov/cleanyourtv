@@ -137,4 +137,5 @@
     <string name="app_appearance_package_hint">Имя пакета приложения</string>
     <string name="app_appearance_invalid">Пакет приложения недоступен</string>
     <string name="app_appearance_reset_confirm">Вернуть исходное название и иконку приложения?</string>
+    <string name="rowa_layout_vertical">Вертикальный столбец</string>
 </resources>

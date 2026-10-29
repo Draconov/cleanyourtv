@@ -194,6 +194,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final boolean dockRow;
     /** config single_row: tiles sit in one sideways row, each as wide as a grid column would be. */
     private final boolean singleRow;
+    private final boolean verticalRail;
     /** config always_show_names: the alpha of an unfocused tile's name (0 hides it). */
     private final float restNameAlpha;
     /** cinematic_home: only then does a launch record the last-opened app the shelf uses. */
@@ -246,6 +247,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.dockTitle = cfg.dockTitle;
         this.dockRow = cfg.dockRow;
         this.singleRow = cfg.singleRow;
+        this.verticalRail = RowaAppearance.get(ctx, "layout") == 4;
         this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
         this.launchActions = cfg.launchActions;
@@ -487,7 +489,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         float density = parent.getResources().getDisplayMetrics().density;
         int width = parent.getWidth() > 0 ? parent.getWidth() : parent.getMeasuredWidth();
         int inner = width - parent.getPaddingLeft() - parent.getPaddingRight();
-        int w = tileWidthPx(inner, parent.getHeight(), dockSize, rowsBelowDock, dockTitle, dockRow, density), h = tileHeightPx(w);
+        int w = verticalRail
+                ? tileWidthPx(inner, 1, density)
+                : tileWidthPx(inner, parent.getHeight(), dockSize, rowsBelowDock, dockTitle, dockRow, density);
+        int h = tileHeightPx(w);
         View card = v.findViewById(R.id.card);
         ViewGroup.LayoutParams cardLp = card.getLayoutParams();
         cardLp.width = w;
@@ -541,8 +546,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.name.setText(e.name);
         // The dock has no labels, unless always_show_names asks for them (DockDecoration then makes room in the band).
         // In a single row every tile is the dock's kind: the big title above names it.
-        boolean dockKind = dockRow && (singleRow || position < dockSize);
-        h.name.setVisibility(dockKind && restNameAlpha == 0f ? View.INVISIBLE : View.VISIBLE);
+        boolean dockKind = verticalRail || dockRow && (singleRow || position < dockSize);
+        h.name.setVisibility(verticalRail || dockKind && restNameAlpha == 0f ? View.INVISIBLE : View.VISIBLE);
         boolean focused = h.card.isFocused();   // a rebind after reload() can hit the focused tile
         h.name.setAlpha(focused ? 1f : restNameAlpha);
         h.card.setScaleX(focused && animations ? focusScale() : 1f);

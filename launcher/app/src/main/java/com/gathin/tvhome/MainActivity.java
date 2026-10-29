@@ -140,6 +140,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Tiles per row and dock slots (res/values/config.xml, columns). Set in onCreate. */
     static int COLUMNS = 4;
     private boolean rtlAppGrid;
+    /** ROWA_V15_13_9: a single scrollable app column, keeping the existing saved dock order. */
+    private boolean verticalRail;
     private static final long MINUTE_MS = 60_000L;
     private static final long STATS_MS = 10_000L;
     /**
@@ -443,6 +445,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         settingsKeycodes = cfg.settingsKeycodes;
         settingsKeyPanel = cfg.settingsKeyPanel;
         COLUMNS = cfg.columns;
+        verticalRail = RowaAppearance.get(this, "layout") == 4;
         animations = cfg.animations;
         advancedEffects = cfg.animations && cfg.advancedEffects;
         reducedMotion = cfg.reducedMotion;
@@ -503,7 +506,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (cinematic) setUpCinematicShelf(cfg.cinematicScrim);
         // dock_title false: the name above the dock (and the cinematic lines under it) never shows; the glow
         // still follows the dock.
-        if (!cfg.dockTitle) hero.setVisibility(View.GONE);
+        if (!cfg.dockTitle && !verticalRail) hero.setVisibility(View.GONE);
         greeting = findViewById(R.id.greeting);
         clockBlock = findViewById(R.id.leftBlock);
         greetingColor = greeting.getCurrentTextColor();
@@ -561,7 +564,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
         // single_row: one span laid out sideways, so the same adapter, glass and dock band serve a scrolling row.
-        grid.setLayoutManager(new GridLayoutManager(this, singleRow ? 1 : COLUMNS,
+        grid.setLayoutManager(new GridLayoutManager(this, verticalRail || singleRow ? 1 : COLUMNS,
                 singleRow ? RecyclerView.HORIZONTAL : RecyclerView.VERTICAL, false) {
             @Override
             protected boolean isLayoutRTL() {
@@ -596,7 +599,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     else parent.smoothScrollBy(dx, 0);
                     return true;
                 }
-                if (dockRow && getPosition(child) < COLUMNS) return false;
+                if (!verticalRail && dockRow && getPosition(child) < COLUMNS) return false;
                 int top = child.getTop() + rect.top;
                 int bottom = top + rect.height();
                 // A row already fully on screen stays put, even inside the bottom padding (the last row
@@ -614,7 +617,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
         ((GridLayoutManager) grid.getLayoutManager()).setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
-            @Override public int getSpanSize(int position) { return !singleRow && adapter != null && adapter.isLibraryAt(position) ? COLUMNS : 1; }
+            @Override public int getSpanSize(int position) { return !verticalRail && !singleRow && adapter != null && adapter.isLibraryAt(position) ? COLUMNS : 1; }
         });
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
@@ -630,7 +633,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
-        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding, cfg.dockBand,
+        if (verticalRail) {
+            // A narrow gap separates the first COLUMNS saved dock positions from the other apps.
+            grid.addItemDecoration(new RecyclerView.ItemDecoration() {
+                @Override public void getItemOffsets(@NonNull Rect out, @NonNull View child,
+                        @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
+                    if (parent.getChildAdapterPosition(child) == COLUMNS - 1)
+                        out.bottom = Math.round(22f * density);
+                }
+            });
+        } else if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding,
                 singleRow, cfg.dockBandAll));
         if (cfg.fadeRows) TopFade.attach(grid, 48 * density);
         // Reduced motion: the tiles are simply there, with no entrance (reloadApps skips it there too).
@@ -644,12 +656,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         Order savedOrder = Order.load(Order.file(this));
         adapter.setSavedOrder(Order.ranks(savedOrder, dockApps), Order.docked(savedOrder, dockApps));
         grid.setAdapter(adapter);
+        if (verticalRail) configureVerticalRail();
 
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
         // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
         int rowsBelowDock = cfg.rowsBelowDock;
         grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             int h = b - t;
+            if (verticalRail) {
+                grid.post(this::refitGlass);
+                return; // No horizontal dock parking or theme grid padding in vertical mode.
+            }
             // Item height follows the tile size, which follows the columns and the rows that must fit (AppAdapter.tileWidthPx).
             int inner = (r - l) - grid.getPaddingLeft() - grid.getPaddingRight();
             int tileW = AppAdapter.tileWidthPx(inner, h, COLUMNS, rowsBelowDock, cfg.dockTitle, cfg.dockRow, density);
@@ -817,6 +834,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
         rowaSetupHeader();
         RowaAppearance.applyHeader(this);
+        if (verticalRail) configureVerticalHeader();
 
         // Keep focus on the top bar at its ends and at the top: Android's focus finder would otherwise
         // jump to a tile far below when there is nothing in that direction.
@@ -824,9 +842,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View.OnKeyListener pillKeys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
+            if (verticalRail && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                if (v == firstVerticalTopButton()) { focusTile(lastFocused); return true; }
+                return false; // Move between the other visible top buttons normally.
+            }
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                // Back to the dock tile Up came from, not wherever the focus finder lands.
-                focusTile(singleRow ? lastFocused : lastFocused % COLUMNS);
+                // Back to the exact vertical rail tile, or the original dock position.
+                focusTile(verticalRail || singleRow ? lastFocused : lastFocused % COLUMNS);
                 return true;
             }
             int firstButton = btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs : firstTopButton().getId();
@@ -1596,6 +1618,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // A single row has no rows to move between: Up and Down leave the carried tile where it is.
         if (singleRow && (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) return;
         int to;
+        if (verticalRail) {
+            if (keyCode != KeyEvent.KEYCODE_DPAD_UP && keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return;
+            to = from + (keyCode == KeyEvent.KEYCODE_DPAD_UP ? -1 : 1);
+            if (to < 0 || to >= n) return;
+            keepScroll(() -> adapter.move(from, to));
+            if (to < COLUMNS) dockInSession.add(movingKey);
+            else dockInSession.remove(movingKey);
+            refocusAfterLayout(to);
+            return;
+        }
         // rtl_app_grid (Hebrew) mirrors the grid: position 0 is on the right, so Left moves towards the end.
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) to = rtlAppGrid ? from + 1 : from - 1;
         else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) to = rtlAppGrid ? from - 1 : from + 1;
@@ -1747,7 +1779,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             springY.animateToFinalPosition(y - glassScrollShift);
         }
         View item = (View) card.getParent();
-        if (dockRow && (singleRow || position < COLUMNS)) {
+        if (verticalRail) {
+            // All apps, including the dock section, are represented by one name in the open space.
+            showHero(position, r.top);
+            revealRect.set(0, -(int) (pad * 2), item.getWidth(), item.getHeight() + (int) pad * 2);
+            grid.requestChildRectangleOnScreen(item, revealRect, reducedMotion);
+        } else if (dockRow && (singleRow || position < COLUMNS)) {
             // Dock: park it at the bottom of the screen and show the top shelf for this app. In a single row
             // every tile is in the dock's row, which never scrolls vertically.
             int decoratedTop = item.getTop() - (int) (6 * density);
@@ -1791,7 +1828,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void showHero(int position, float dockTopInRoot) {
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
-        float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
+        float y = verticalRail
+                ? Math.max(180f * density, (root.getHeight() - hero.getHeight()) * 0.55f)
+                : dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
+        if (verticalRail) {
+            // The name sits in the middle of the TV, safely to the right of the entire app rail.
+            hero.setX(Math.max(245f * density, root.getWidth() * 0.45f));
+        }
         boolean changed = !label.contentEquals(heroName.getText());
         if (cinematic && heroArtAlpha > 0f) showHeroArt(position);
 
@@ -1849,7 +1892,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** The shelf's text for this dock app: its name and, on the cinematic shelf, "Last opened" and the dots. */
     private void fillHero(int position, String label) {
         heroName.setText(label);
-        if (!cinematic) return;
+        if (!cinematic || verticalRail) return;
         updateHeroMeta(position);
         updateHeroDots(position);
     }
@@ -2312,12 +2355,97 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 : res.getString(R.string.storage_gb_decimal, gb);
     }
 
+    /** Move the same RecyclerView into a dedicated left rail, without changing its adapter or saved order. */
+    private void configureVerticalRail() {
+        ViewGroup oldParent = (ViewGroup) grid.getParent();
+        oldParent.removeView(grid);
+        oldParent.setVisibility(View.GONE);
+        FrameLayout.LayoutParams rail = new FrameLayout.LayoutParams(
+                Math.round(214f * density), ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.START | Gravity.TOP);
+        rail.leftMargin = Math.round(22f * density);
+        rail.topMargin = Math.round(14f * density);
+        rail.bottomMargin = Math.round(12f * density);
+        root.addView(grid, root.indexOfChild(glass), rail);
+        grid.setPadding(Math.round(8f * density), Math.round(8f * density),
+                Math.round(8f * density), Math.round(24f * density));
+        // No off-screen row should consume focus at the edge of the TV.
+        grid.setClipToPadding(false);
+    }
+
+    /** The button row stays at top-right; the complete greeting/clock/date/weather block follows below. */
+    private void configureVerticalHeader() {
+        View left = findViewById(R.id.leftBlock);
+        View buttons = findViewById(R.id.topButtons);
+        RelativeLayout.LayoutParams bp = (RelativeLayout.LayoutParams) buttons.getLayoutParams();
+        bp.removeRule(RelativeLayout.ALIGN_BOTTOM);
+        bp.removeRule(RelativeLayout.ALIGN_TOP);
+        bp.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+        bp.addRule(RelativeLayout.ALIGN_PARENT_END);
+        bp.bottomMargin = 0;
+        buttons.setLayoutParams(bp);
+
+        RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) left.getLayoutParams();
+        lp.removeRule(RelativeLayout.ALIGN_PARENT_START);
+        lp.removeRule(RelativeLayout.START_OF);
+        lp.addRule(RelativeLayout.BELOW, R.id.topButtons);
+        lp.addRule(RelativeLayout.ALIGN_PARENT_END);
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        lp.width = Math.max(Math.round(260f * density),
+                Math.min(Math.round(720f * density), screenWidth - Math.round(330f * density)));
+        lp.topMargin = Math.round(12f * density);
+        lp.bottomMargin = 0;
+        left.setLayoutParams(lp);
+
+        View statistics = findViewById(R.id.stats);
+        RelativeLayout.LayoutParams sp = (RelativeLayout.LayoutParams) statistics.getLayoutParams();
+        sp.removeRule(RelativeLayout.ALIGN_START);
+        sp.addRule(RelativeLayout.ALIGN_END, R.id.leftBlock);
+        statistics.setLayoutParams(sp);
+        // Hero text does not overlap the top-right header even with a very long app name.
+        heroName.setMaxWidth(Math.max(Math.round(220f * density),
+                screenWidth - Math.round(585f * density)));
+        heroName.setEllipsize(TextUtils.TruncateAt.END);
+        heroMeta.setVisibility(View.GONE);
+        heroDots.setVisibility(View.GONE);
+    }
+
+    /** Unlike firstTopButton(), this includes the Inputs pill when it is visible. */
+    private View firstVerticalTopButton() {
+        ViewGroup bar = findViewById(R.id.topButtons);
+        for (int i = 0; i < bar.getChildCount(); i++) {
+            View child = bar.getChildAt(i);
+            if (child.getVisibility() == View.VISIBLE && child.isFocusable()) return child;
+        }
+        return findViewById(R.id.btnSettings);
+    }
+
     // ---- navigation ------------------------------------------------------------------------------
 
     @Override
     public boolean onTileVerticalKey(int position, int keyCode) {
         int count = adapter.appCount();
         int target;
+        if (verticalRail) {
+            // App column is on the left. RIGHT always reaches the top action row; LEFT stays in rail.
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                firstVerticalTopButton().requestFocus();
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return true;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) target = position - 1;
+            else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) target = position + 1;
+            else return false;
+            if (target < 0) return true;
+            if (target >= count) {
+                if (adapter.isLibraryAt(count)) focusLibrary();
+                return true;
+            }
+            focusTile(target);
+            grid.playSoundEffect(keyCode == KeyEvent.KEYCODE_DPAD_UP
+                    ? SoundEffectConstants.NAVIGATION_UP : SoundEffectConstants.NAVIGATION_DOWN);
+            return true;
+        }
         if (singleRow) {
             // One row: Up leaves for the top bar, Down has nowhere to go, and Left/Right walk the whole row,
             // stopping at its two ends (the default focus search scrolls the row to the next tile).
@@ -2443,7 +2571,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override public void onLibraryUp() {
         if (adapter.appCount() == 0) { firstTopButton().requestFocus(); return; }
-        int lastRow = ((adapter.appCount() - 1) / COLUMNS) * COLUMNS;
+        int lastRow = verticalRail ? adapter.appCount() - 1
+                : ((adapter.appCount() - 1) / COLUMNS) * COLUMNS;
         focusTile(Math.min(lastRow + lastFocused % COLUMNS, adapter.appCount() - 1));
     }
 
@@ -4156,7 +4285,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private static int rowaAppearanceChoices(String key) {
-        return "layout".equals(key) || "columns".equals(key) || "glow".equals(key) ? 4 : 3;
+        return "layout".equals(key) ? 5
+                : "columns".equals(key) || "glow".equals(key) ? 4 : 3;
     }
 
     private String rowaAppearanceValue(String key) {

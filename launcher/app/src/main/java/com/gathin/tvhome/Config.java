@@ -635,6 +635,7 @@ final class Config {
         if (rowaLayout == 1) { dockRow = false; singleRow = false; rowsBelow = 0; }
         else if (rowaLayout == 2) { dockRow = true; singleRow = false; }
         else if (rowaLayout == 3) { dockRow = true; singleRow = true; rowsBelow = 0; }
+        else if (rowaLayout == 4) { dockRow = true; singleRow = false; rowsBelow = 0; }
         return new Config(dock, fillDock, hidden, libraryApps, liveTv, liveTvAction, liveTvInputId, packageMap(launchActions), packageMap(appLabels),
                 packageMap(appBanners), panelService, panelAction, panelExtra, coocaaSources, inputAction, inputUriScheme, Math.max(1, columns),
                 Math.max(0, rowsBelow), animations, advancedEffects, shamsi, greetingName, moduleCards, reducedMotion, bootToLiveTv,

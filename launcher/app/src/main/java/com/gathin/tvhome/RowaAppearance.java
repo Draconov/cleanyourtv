@@ -113,6 +113,7 @@ final class RowaAppearance {
             case 1: return ctx.getString(R.string.rowa_layout_grid);
             case 2: return ctx.getString(R.string.rowa_layout_dock);
             case 3: return ctx.getString(R.string.rowa_layout_single);
+            case 4: return ctx.getString(R.string.rowa_layout_vertical);
             default: return ctx.getString(R.string.rowa_layout_default);
         }
     }

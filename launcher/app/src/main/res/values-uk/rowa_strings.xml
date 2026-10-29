@@ -137,4 +137,5 @@
     <string name="app_appearance_package_hint">Назва пакета застосунку</string>
     <string name="app_appearance_invalid">Пакет застосунку недоступний</string>
     <string name="app_appearance_reset_confirm">Повернути початкову назву та іконку?</string>
+    <string name="rowa_layout_vertical">Вертикальний стовпець</string>
 </resources>
