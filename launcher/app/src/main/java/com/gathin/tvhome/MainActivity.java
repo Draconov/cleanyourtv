@@ -142,6 +142,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean rtlAppGrid;
     /** ROWA_V15_13_9: a single scrollable app column, keeping the existing saved dock order. */
     private boolean verticalRail;
+    private RowaVerticalRailView verticalRailBackdrop;
     private static final long MINUTE_MS = 60_000L;
     private static final long STATS_MS = 10_000L;
     /**
@@ -450,7 +451,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         advancedEffects = cfg.animations && cfg.advancedEffects;
         reducedMotion = cfg.reducedMotion;
         dockRow = cfg.dockRow;
-        singleRow = cfg.singleRow;
+        // Vertical mode takes precedence if an older theme also requested single_row.
+        singleRow = cfg.singleRow && !verticalRail;
         focusOvershoot = cfg.focusOvershoot;
         festival = cfg.festival;
         festive = festival.active(LocalDate.now());
@@ -487,7 +489,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The glow is one bitmap, so its alpha can be applied while drawing it. Otherwise every frame of
         // a fade renders it into a full-screen offscreen buffer first.
         ambient.forceHasOverlappingRendering(false);
-        ambientGlow = cfg.ambientGlow;
+        // The vertical rail supplies its own localized app-color glow. Full-screen
+        // ambient tint is unnecessary there and would obscure the wallpaper.
+        ambientGlow = cfg.ambientGlow && !verticalRail;
         appGlow = cfg.appGlow;
         if (!ambientGlow) ambient.setVisibility(View.GONE);
         heroName = findViewById(R.id.heroName);
@@ -502,8 +506,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glowStyle = cfg.glowStyle;
         heroDotsShown = cfg.cinematicDots;
         cinematicWhiteFocus = cfg.cinematicWhiteFocus;
-        heroArtAlpha = cfg.cinematicArt / 100f;
-        if (cinematic) setUpCinematicShelf(cfg.cinematicScrim);
+        heroArtAlpha = verticalRail ? 0f : cfg.cinematicArt / 100f;
+        if (cinematic && !verticalRail) setUpCinematicShelf(cfg.cinematicScrim);
+        if (verticalRail) {
+            heroArt.setVisibility(View.GONE);
+            ambient.setVisibility(View.GONE);
+            findViewById(R.id.heroScrim).setVisibility(View.GONE);
+        }
         // dock_title false: the name above the dock (and the cinematic lines under it) never shows; the glow
         // still follows the dock.
         if (!cfg.dockTitle && !verticalRail) hero.setVisibility(View.GONE);
@@ -584,6 +593,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public boolean requestChildRectangleOnScreen(@NonNull RecyclerView parent, @NonNull View child,
                                                          @NonNull Rect rect, boolean immediate,
                                                          boolean focusedChildVisible) {
+                if (verticalRail) {
+                    // Keep the complete focused card inside the rail's safe area,
+                    // including its focus scale and glow. Padding gives the first
+                    // and last cards room to enter fully.
+                    int safe = Math.round(52f * density);
+                    int top = child.getTop() + rect.top;
+                    int bottom = top + rect.height();
+                    int dy = top < safe ? top - safe
+                            : bottom > getHeight() - safe ? bottom - (getHeight() - safe) : 0;
+                    if (dy == 0) return false;
+                    if (immediate || reducedMotion || !animations) parent.scrollBy(0, dy);
+                    else parent.smoothScrollBy(0, dy);
+                    return true;
+                }
                 if (singleRow) {
                     // Sideways: scroll just enough to bring the tile's cell inside the padding. Cells are a
                     // column wide, so the row moves a whole tile at a time and the tiles stay on the columns.
@@ -644,7 +667,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             });
         } else if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding, cfg.dockBand,
                 singleRow, cfg.dockBandAll));
-        if (cfg.fadeRows) TopFade.attach(grid, 48 * density);
+        // A small GPU-backed fade masks the top and bottom of the vertical rail,
+        // avoiding hard-cut tiles while retaining the existing horizontal fade behavior.
+        if (verticalRail) RowaVerticalEdgeFade.attach(grid, 42f * density);
+        else if (cfg.fadeRows) TopFade.attach(grid, 48 * density);
         // Reduced motion: the tiles are simply there, with no entrance (reloadApps skips it there too).
         if (animations && !reducedMotion) {
             grid.setLayoutAnimation(new LayoutAnimationController(
@@ -714,6 +740,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                // Keep the colored rail spotlight under the moving focused card.
+                if (verticalRail && verticalRailBackdrop != null && adapter != null) {
+                    RecyclerView.ViewHolder focused = grid.findViewHolderForAdapterPosition(lastFocused);
+                    View card = focused == null ? null : focused.itemView.findViewById(R.id.card);
+                    if (card != null && card.isFocused()) {
+                        Rect rect = new Rect(0, 0, card.getWidth(), card.getHeight());
+                        root.offsetDescendantRectToMyCoords(card, rect);
+                        verticalRailBackdrop.setFocusedTile(rect.exactCenterY(),
+                                adapter.ambientColorAt(lastFocused));
+                    }
+                }
                 if (!glassShown) return;
                 glassTargetY -= dy;
                 glassScrollShift -= dy;
@@ -1759,9 +1796,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glassTargetY = y;
         // Cinematic shelf: the highlight glows in the dock app's colour, plain white in the grid (and on the dock with
         // cinematic_white_focus). app_glow: every tile. In a single row every tile is the dock's kind.
-        boolean coloured = (appGlow || cinematic && !cinematicWhiteFocus && (singleRow || position < COLUMNS)) && !festive;
+        boolean coloured = (verticalRail || appGlow || cinematic && !cinematicWhiteFocus
+                && (singleRow || position < COLUMNS)) && !festive;
         int accent = coloured ? adapter.ambientColorAt(position) : 0;
-        if ((cinematic || appGlow) && !festive && accent != glassAccent) {
+        if ((verticalRail || cinematic || appGlow) && !festive && accent != glassAccent) {
             glassAccent = accent;
             glass.setAccent(accent);
         }
@@ -1784,6 +1822,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         View item = (View) card.getParent();
         if (verticalRail) {
+            // A localized, app-colored spotlight sits under the selected tile;
+            // the rest of the wallpaper is never tinted by a full-screen glow.
+            if (verticalRailBackdrop != null)
+                verticalRailBackdrop.setFocusedTile(r.exactCenterY(), adapter.ambientColorAt(position));
             // All apps, including the dock section, are represented by one name in the open space.
             showHero(position, r.top);
             revealRect.set(0, -(int) (pad * 2), item.getWidth(), item.getHeight() + (int) pad * 2);
@@ -1836,8 +1878,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 ? Math.max(180f * density, (root.getHeight() - hero.getHeight()) * 0.55f)
                 : dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
         if (verticalRail) {
-            // The name sits in the middle of the TV, safely to the right of the entire app rail.
-            hero.setX(Math.max(245f * density, root.getWidth() * 0.45f));
+            // Use the measured rail edge, not a percentage of screen width.
+            // This prevents the name overlapping the column on different TVs.
+            float titleX = (grid.getRight() > 0 ? grid.getRight()
+                    : Math.round(236f * density)) + 30f * density;
+            hero.setX(titleX);
+            heroName.setMaxWidth(Math.max(Math.round(150f * density),
+                    (int) (root.getWidth() - titleX - 42f * density)));
         }
         boolean changed = !label.contentEquals(heroName.getText());
         if (cinematic && heroArtAlpha > 0f) showHeroArt(position);
@@ -2359,21 +2406,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 : res.getString(R.string.storage_gb_decimal, gb);
     }
 
-    /** Move the same RecyclerView into a dedicated left rail, without changing its adapter or saved order. */
+    /** Give the rail its own lightweight gradient and focus-color glow, no bitmap allocations. */
     private void configureVerticalRail() {
         ViewGroup oldParent = (ViewGroup) grid.getParent();
         oldParent.removeView(grid);
         oldParent.setVisibility(View.GONE);
+
+        verticalRailBackdrop = new RowaVerticalRailView(this);
+        FrameLayout.LayoutParams backdrop = new FrameLayout.LayoutParams(
+                Math.round(266f * density), ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.START | Gravity.TOP);
+        root.addView(verticalRailBackdrop, root.indexOfChild(glass), backdrop);
+
         FrameLayout.LayoutParams rail = new FrameLayout.LayoutParams(
                 Math.round(214f * density), ViewGroup.LayoutParams.MATCH_PARENT,
                 Gravity.START | Gravity.TOP);
         rail.leftMargin = Math.round(22f * density);
-        rail.topMargin = Math.round(14f * density);
-        rail.bottomMargin = Math.round(12f * density);
         root.addView(grid, root.indexOfChild(glass), rail);
-        grid.setPadding(Math.round(8f * density), Math.round(8f * density),
-                Math.round(8f * density), Math.round(24f * density));
-        // No off-screen row should consume focus at the edge of the TV.
+        // Keep the very first and last cards completely visible, while the edge
+        // masks soften cards that continue beyond the viewport during scrolling.
+        grid.setPadding(Math.round(8f * density), Math.round(64f * density),
+                Math.round(8f * density), Math.round(68f * density));
         grid.setClipToPadding(false);
     }
 
@@ -2392,14 +2445,26 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) left.getLayoutParams();
         lp.removeRule(RelativeLayout.ALIGN_PARENT_START);
         lp.removeRule(RelativeLayout.START_OF);
+        lp.removeRule(RelativeLayout.ALIGN_PARENT_LEFT);
         lp.addRule(RelativeLayout.BELOW, R.id.topButtons);
         lp.addRule(RelativeLayout.ALIGN_PARENT_END);
+        lp.rightMargin = 0;
+        lp.leftMargin = 0;
+        lp.setMarginEnd(0);
+        lp.setMarginStart(0);
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        lp.width = Math.max(Math.round(260f * density),
-                Math.min(Math.round(720f * density), screenWidth - Math.round(330f * density)));
+        lp.width = Math.max(Math.round(280f * density),
+                Math.min(Math.round(670f * density), screenWidth - Math.round(325f * density)));
         lp.topMargin = Math.round(12f * density);
         lp.bottomMargin = 0;
         left.setLayoutParams(lp);
+        // Right-align the CONTENTS as well as the container. A right-aligned
+        // container with left-aligned TextViews was why the clock appeared at
+        // the middle of the screen rather than under the right-hand buttons.
+        greeting.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        View clockRow = (View) findViewById(R.id.clock).getParent();
+        if (clockRow instanceof LinearLayout)
+            ((LinearLayout) clockRow).setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
 
         View statistics = findViewById(R.id.stats);
         // show_stats moves this view into the LinearLayout topButtons. Never cast its
@@ -4479,7 +4544,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         // A full-size weather item and the smaller two-line date are centred
         // within the clock's text row. The date no longer protrudes above/below.
-        clockRow.setGravity(Gravity.CENTER_VERTICAL);
+        clockRow.setGravity(verticalRail ? Gravity.RIGHT | Gravity.CENTER_VERTICAL : Gravity.CENTER_VERTICAL);
         trailing.setGravity(Gravity.CENTER_VERTICAL);
         dateColumn.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams weatherLp = (LinearLayout.LayoutParams) weather.getLayoutParams();
