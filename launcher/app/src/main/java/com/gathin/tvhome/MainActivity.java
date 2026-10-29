@@ -1877,15 +1877,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         float y = verticalRail
                 ? Math.max(180f * density, (root.getHeight() - hero.getHeight()) * 0.55f)
                 : dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
-        if (verticalRail) {
-            // Use the measured rail edge, not a percentage of screen width.
-            // This prevents the name overlapping the column on different TVs.
-            float titleX = (grid.getRight() > 0 ? grid.getRight()
-                    : Math.round(236f * density)) + 30f * density;
-            hero.setX(titleX);
-            heroName.setMaxWidth(Math.max(Math.round(150f * density),
-                    (int) (root.getWidth() - titleX - 42f * density)));
-        }
+        // Vertical title positioning is set once in configureVerticalRail using
+        // layout margins. Keep focus animations free to adjust translationX.
         boolean changed = !label.contentEquals(heroName.getText());
         if (cinematic && heroArtAlpha > 0f) showHeroArt(position);
 
@@ -2428,6 +2421,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.setPadding(Math.round(8f * density), Math.round(64f * density),
                 Math.round(8f * density), Math.round(68f * density));
         grid.setClipToPadding(false);
+
+        // Anchor the focused app title in the root's LAYOUT, after the rail's actual
+        // configured right edge.  View.setX() must not be used here: showHero's
+        // translationX animations reset it to the XML's original 68dp position.
+        // The layout margin survives every fade, label change and focus animation.
+        int titleInset = rail.leftMargin + rail.width + Math.round(30f * density);
+        FrameLayout.LayoutParams heroLp = (FrameLayout.LayoutParams) hero.getLayoutParams();
+        heroLp.gravity = Gravity.TOP | Gravity.START;
+        heroLp.setMarginStart(titleInset);
+        hero.setLayoutParams(heroLp);
+        hero.setTranslationX(0f);
     }
 
     /** The button row stays at top-right; the complete greeting/clock/date/weather block follows below. */
@@ -2475,9 +2479,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             sp.addRule(RelativeLayout.ALIGN_END, R.id.leftBlock);
             statistics.setLayoutParams(sp);
         }
-        // Hero text does not overlap the top-right header even with a very long app name.
-        heroName.setMaxWidth(Math.max(Math.round(220f * density),
-                screenWidth - Math.round(585f * density)));
+        // Keep long titles inside the space after the rail, without imposing a
+        // minimum that could push text back over the rail on small displays.
+        FrameLayout.LayoutParams heroLp = (FrameLayout.LayoutParams) hero.getLayoutParams();
+        int titleInset = heroLp.getMarginStart();
+        heroName.setMaxWidth(Math.max(1,
+                screenWidth - titleInset - Math.round(28f * density)));
         heroName.setEllipsize(TextUtils.TruncateAt.END);
         heroMeta.setVisibility(View.GONE);
         heroDots.setVisibility(View.GONE);
